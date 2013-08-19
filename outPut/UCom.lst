@@ -1,0 +1,411 @@
+C51 COMPILER V9.51   UCOM                                                                  05/29/2013 17:36:17 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE UCOM
+OBJECT MODULE PLACED IN .\outPut\UCom.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\UCom.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEN
+                    -D PRINT(.\outPut\UCom.lst) TABS(2) PREPRINT(.\outPut\UCom.i) OBJECT(.\outPut\UCom.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiICom
+   3          //
+   4          // Module Description:  used for debugging RX system
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          #include "UCom.h"
+  14          #include "UDebugHLIIC.h"
+  15          #include "SiIHAL.h"
+  16          #include "UMCU_IO.h"
+  17          #include "UGlob.h"
+  18          #include "SiISysCtrl.h"
+  19          #include "SiIRX_API.h"
+  20          #include "SiIHDMIRX.h"
+  21          
+  22          #include "SiITTAudio.h"
+  23          #include "SiIVidF.h"
+  24          IRAM BYTE FuncRes[FUNC_RES_SIZE];
+  25          CmdType * CmdPtr;
+  26          
+  27          //------------------------------------------------------------------------------
+  28          // Function Name: CommAccepted
+  29          // Function Description: Sends simple confirmation on received command
+  30          //------------------------------------------------------------------------------
+  31          static void CommAccepted( void ){
+  32   1      
+  33   1          if( halReadRXInt_Pin() )
+  34   1              PutChar( COM_ACK );
+  35   1          else
+  36   1              PutChar( COM_ACK_SII_INTERRUPT );
+  37   1      
+  38   1      }
+  39          //------------------------------------------------------------------------------
+  40          // Function Name: SendHandShake
+  41          // Function Description: Sends confirmation on received command
+  42          //------------------------------------------------------------------------------
+  43          static void SendHandShake( BYTE IICMDDCErrState){
+  44   1      BYTE bHandShake;
+  45   1      
+  46   1          if ( !IICMDDCErrState ){
+  47   2              if ( halReadRXInt_Pin() )
+  48   2                  bHandShake = COM_ACK;
+  49   2              else
+  50   2                  bHandShake = COM_ACK_SII_INTERRUPT;
+  51   2          }
+  52   1          else if ( IICMDDCErrState == IIC_CAPTURED)
+  53   1              bHandShake = COM_ACK_IIC_CAPTUTED;
+  54   1          else if ( IICMDDCErrState == IIC_NOACK)
+C51 COMPILER V9.51   UCOM                                                                  05/29/2013 17:36:17 PAGE 2   
+
+  55   1              bHandShake = COM_ACK_IIC_NOACK;
+  56   1          else if ( IICMDDCErrState == MDDC_NOACK)
+  57   1              bHandShake = COM_ACK_MDDC_NOACK;
+  58   1          PutChar( bHandShake );
+  59   1      }
+  60          
+  61          //------------------------------------------------------------------------------
+  62          // Function Name: SendDataFrom8BAIICDevice
+  63          // Function Description: Sends data which has been reading from IIC device with 8 bit
+  64          //                       addressing mode.
+  65          //------------------------------------------------------------------------------
+  66          static void SendDataFrom8BAIICDevice( void ) {
+  67   1      BYTE i; BYTE bCheckSum, bState;
+  68   1      
+  69   1          bCheckSum = 0;
+  70   1          bState = BlockRead_8BA(&CmdPtr->I2CCommand);
+  71   1          SendHandShake( bState );
+  72   1          if( !bState ) {// no errors
+  73   2              for ( i = 0; i < CmdPtr->I2CCommand.NBytes; i++ ) {
+  74   3                  bCheckSum += CmdPtr->I2CCommand.Data[i];
+  75   3                       PutChar(CmdPtr->I2CCommand.Data[i]);
+  76   3              }
+  77   2              PutChar( bCheckSum );
+  78   2          }
+  79   1      }
+  80          //------------------------------------------------------------------------------
+  81          // Function Name: WriteDataTo8BAIICDevice
+  82          // Function Description: Writes data to IIC device with 8 bit addressing mode.
+  83          //------------------------------------------------------------------------------
+  84          static void WriteDataTo8BAIICDevice( void ) {
+  85   1      BYTE bState;
+  86   1      
+  87   1          bState = BlockWrite_8BA((I2CCommandType *)&CmdPtr->I2CCommand);
+  88   1          SendHandShake( bState );
+  89   1      
+  90   1      }
+  91          //------------------------------------------------------------------------------
+  92          // Function Name: WriteDataTo16BAIICDevice
+  93          // Function Description: Writes data to IIC device with 16 bit addressing mode.
+  94          //                       this device addressing mode used for "big" EEPROMs
+  95          //------------------------------------------------------------------------------
+  96          #ifdef _BIGEEPROM_
+  97          
+  98          static void WriteDataTo16BAIICDevice( void ) {
+  99   1      BYTE bState;
+ 100   1      
+ 101   1          bState = BlockWrite_16BA((I2CCommandType *)&CmdPtr->I2CCommand);
+ 102   1          SendHandShake( bState );
+ 103   1      }
+ 104          
+ 105          //------------------------------------------------------------------------------
+ 106          // Function Name: SendDataFrom16BAIICDevice
+ 107          // Function Description: Sends data which has been reading from IIC device with 16 bit
+ 108          //                       addressing mode. This address mode is used for big IIC EEPROMS
+ 109          //------------------------------------------------------------------------------
+ 110          static void SendDataFrom16BAIICDevice( void ){
+ 111   1      BYTE i; BYTE bCheckSum, bState;
+ 112   1      
+ 113   1          bCheckSum = 0;
+ 114   1          bState = BlockRead_16BA( &CmdPtr->I2CCommand );
+ 115   1          SendHandShake( bState );
+ 116   1          if( !bState ){
+C51 COMPILER V9.51   UCOM                                                                  05/29/2013 17:36:17 PAGE 3   
+
+ 117   2              for(i = 0; i < CmdPtr->I2CCommand.NBytes; i++) {
+ 118   3                  bCheckSum += CmdPtr->I2CCommand.Data[i];
+ 119   3                  PutChar(CmdPtr->I2CCommand.Data[i]);
+ 120   3              }
+ 121   2              PutChar( bCheckSum );
+ 122   2          }
+ 123   1      }
+ 124          
+ 125          #endif  // end _BIGEEPROM_
+ 126          //------------------------------------------------------------------------------
+ 127          // Function Name: SendResultOfFunction
+ 128          // Function Description: Sends function result through UART
+ 129          //------------------------------------------------------------------------------
+ 130          static void SendResultOfFunction( void ){
+ 131   1      BYTE bCheckSum, i;
+ 132   1      
+ 133   1          bCheckSum = 0;
+ 134   1          for (i = 0; i < CmdPtr->FuncCommand.NBytes; i++){
+ 135   2              bCheckSum +=  FuncRes[i];
+ 136   2              PutChar( FuncRes[i]);
+ 137   2          }
+ 138   1          PutChar( bCheckSum );
+ 139   1      }
+ 140          
+ 141          //------------------------------------------------------------------------------
+ 142          // Function Name: ClearFuncBuff
+ 143          // Function Description: ckears function result buffer
+ 144          //------------------------------------------------------------------------------
+ 145          static void ClearFuncBuff( void ){
+ 146   1      BYTE i;
+ 147   1      
+ 148   1          for ( i = 0; i < FUNC_RES_SIZE; i++)
+ 149   1              FuncRes[i] = 0;
+ 150   1      }
+ 151          //------------------------------------------------------------------------------
+ 152          // Function Name: ParseCommand
+ 153          // Function Description: this function is used for parsing of command which received
+ 154          //                       trough UART interface
+ 155          //------------------------------------------------------------------------------
+ 156          static void ParseCommand( void ){
+ 157   1      
+ 158   1          if( CmdPtr->cmdbuf[0] >= BEG_FUNC_CALLS ) { // check for function space Id
+ 159   2      
+ 160   2              ClearFuncBuff();
+ 161   2              if( CmdPtr->cmdbuf[0] != FUNC_RESULT )
+ 162   2      
+ 163   2              switch( CmdPtr->cmdbuf[0] ) {// command decoding
+ 164   3                  case CmdGetGPIO:
+ 165   3                              CommAccepted();
+ 166   3                              qFuncExe = TRUE;
+ 167   3                              qBuffInUse = FALSE;
+ 168   3                              siiReadGPIO( FuncRes );
+ 169   3                              qFuncExe = FALSE;
+ 170   3                              break;
+ 171   3                  case CmdSendGPIO:
+ 172   3                              CommAccepted();
+ 173   3                              siiWriteGPIO( &CmdPtr->FuncCommand.Data[0] );
+ 174   3                              break;
+ 175   3                  case MakeRecoveryClock:
+ 176   3                              CommAccepted();
+ 177   3                              DoRecoverySCLs ( );
+ 178   3                              break;
+C51 COMPILER V9.51   UCOM                                                                  05/29/2013 17:36:17 PAGE 4   
+
+ 179   3                  case RXAPI_InitializeSystem:
+ 180   3                              CommAccepted();
+ 181   3                  siiTurnAudioOffAndSetSM_AudioOff();
+ 182   3                  siiMuteVideo(ON);
+ 183   3                              FuncRes[0] = SiI_RX_InitializeSystem ( &CmdPtr->FuncCommand.Data[0] );
+ 184   3                              break;
+ 185   3                  case RXAPI_SetVideoInput:
+ 186   3                              CommAccepted();
+ 187   3                              FuncRes[0] = SiI_RX_SetVideoInput (CmdPtr->FuncCommand.Data[0]);
+ 188   3                              break;
+ 189   3                  case RXAPI_GetVideoFormat:
+ 190   3                              CommAccepted();
+ 191   3                              FuncRes[0] = SiI_RX_GetVideoOutputFormat (&FuncRes[1]);
+ 192   3                              break;
+ 193   3                  case RXAPI_GetVideoInputResolution:
+ 194   3                              CommAccepted();
+ 195   3                              FuncRes[0] = SiI_RX_GetVideoInputResolution (&FuncRes[1]);
+ 196   3                              break;
+ 197   3                  case RXAPI_SetVideoFormat:
+ 198   3                              CommAccepted();
+ 199   3                              FuncRes[0] = SiI_RX_SetVideoOutputFormat (
+ 200   3                                          CmdPtr->FuncCommand.Data[0],
+ 201   3                                          CmdPtr->FuncCommand.Data[1],
+ 202   3                                          CmdPtr->FuncCommand.Data[2],
+ 203   3                                          CmdPtr->FuncCommand.Data[3]
+ 204   3                                          );
+ 205   3                              break;
+ 206   3                  case RXAPI_SetGlobalPower:
+ 207   3                              CommAccepted();
+ 208   3                              FuncRes[0] = SiI_RX_GlobalPower (CmdPtr->FuncCommand.Data[0]);
+ 209   3                              break;
+ 210   3                  case RXAPI_SetAudioVideoMute:
+ 211   3                              CommAccepted();
+ 212   3                              FuncRes[0] = SiI_RX_SetAudioVideoMute (CmdPtr->FuncCommand.Data[0]);
+ 213   3                              break;
+ 214   3                  case RXAPI_GetAPIInfo:
+ 215   3                              CommAccepted();
+ 216   3                              FuncRes[0] = SiI_RX_GetAPI_Info ( &FuncRes[1] );
+ 217   3                              break;
+ 218   3                  case RXAPI_GetSystemInformation:
+ 219   3                              CommAccepted();
+ 220   3                              FuncRes[0] = SiI_RX_GetSystemInformation ( &FuncRes[1] );
+ 221   3                              break;
+ 222   3                  /* Command has been removed from API 1.0 specification
+ 223   3                  case RXAPI_GetTasksSchedule:
+ 224   3                              CommAccepted();
+ 225   3                              FuncRes[0] = SiI_RX_GetTasksSchedule ( &FuncRes[1] );
+ 226   3                              break;
+ 227   3                  */
+ 228   3                  case RXAPI_GetAudioInputStatus:
+ 229   3                              CommAccepted();
+ 230   3                              FuncRes[0] = SiI_RX_GetAudioInputStatus( &FuncRes[1] );
+ 231   3                              break;
+ 232   3                  case RXAPI_GetNCTS:
+ 233   3                              FuncRes[0] = SiI_Diagnostic_GetNCTS (  &FuncRes[1] );
+ 234   3                              CommAccepted();
+ 235   3                              break;
+ 236   3                  case RXAPI_GetABKSV:
+ 237   3                              FuncRes[0] = SiI_Diagnostic_GetABKSV (  &FuncRes[1] );
+ 238   3                              CommAccepted();
+ 239   3                              break;
+ 240   3                  case RXAPI_GetAudioOutputFormat:
+C51 COMPILER V9.51   UCOM                                                                  05/29/2013 17:36:17 PAGE 5   
+
+ 241   3                              FuncRes[0] = SiI_RX_GetAudioOutputFormat ( &FuncRes[1] );
+ 242   3                              CommAccepted();
+ 243   3                              break;
+ 244   3                  case RXAPI_SetAudioOutputFormat:
+ 245   3                              CommAccepted();
+ 246   3                              FuncRes[0] = SiI_RX_SetAudioOutputFormat ( (WORD) ( CmdPtr->FuncCommand.Data[0] | 
+             -(CmdPtr->FuncCommand.Data[1] << 8 )),
+ 247   3                                                                         (WORD) ( CmdPtr->FuncCommand.Data[2] | 
+             -(CmdPtr->FuncCommand.Data[3] << 8 )),
+ 248   3                                                                                  CmdPtr->FuncCommand.Data[4],Cm
+             -dPtr->FuncCommand.Data[5] //YMA 2 add DSDHBRformat
+ 249   3                                                                       );
+ 250   3                              break;
+ 251   3      
+ 252   3                  case RXAPI_GetIPacket:
+ 253   3                              FuncRes[0] = SiI_RX_GetPackets ( CmdPtr->FuncCommand.Data[0], &FuncRes[1] );
+ 254   3                              CommAccepted();
+ 255   3                              break;
+ 256   3                  case API_GetWarningData:
+ 257   3                              FuncRes[0] = SiI_GetWarnings( &FuncRes[1] );
+ 258   3                              CommAccepted();
+ 259   3                              break;
+ 260   3                  case API_GetErrorData:
+ 261   3                              FuncRes[0] = SiI_GetErrors( &FuncRes[1] );
+ 262   3                              CommAccepted();
+ 263   3      
+ 264   3                              break;
+ 265   3                  case API_GetLastAPI_ExeTime:
+ 266   3                              CommAccepted();
+ 267   3                              FuncRes[0] = SiI_Diagnostic_GetAPIExeTime( &FuncRes[1] );
+ 268   3                              break;
+ 269   3                  default:
+ 270   3      
+ 271   3                              PutChar(COMMAND_NOT_SUPPORTED);
+ 272   3                }
+ 273   2          }
+ 274   1          else if(CmdPtr->cmdbuf[0]==FUNC_RESULT){
+ 275   2                  CommAccepted();
+ 276   2                  SendResultOfFunction();
+ 277   2          }
+ 278   1          else {
+ 279   2              switch( CmdPtr->cmdbuf[0] ) {// command decoding
+ 280   3      
+ 281   3      
+ 282   3                  case  IIC8BARead:
+ 283   3                              SendDataFrom8BAIICDevice();
+ 284   3                              break;
+ 285   3                  case  IIC16BARead:
+ 286   3      #ifdef _BIGEEPROM_
+ 287   3                              SendDataFrom16BAIICDevice();
+ 288   3      #else
+                                      PutChar(COMMAND_NOT_SUPPORTED);
+              #endif
+ 291   3                              break;
+ 292   3                  case  IIC8BAWrite:
+ 293   3                              WriteDataTo8BAIICDevice();
+ 294   3                              break;
+ 295   3                  case  IIC16BAWrite:
+ 296   3      #ifdef _BIGEEPROM_
+ 297   3                              WriteDataTo16BAIICDevice();
+ 298   3      #else
+                                      PutChar(COMMAND_NOT_SUPPORTED);
+C51 COMPILER V9.51   UCOM                                                                  05/29/2013 17:36:17 PAGE 6   
+
+              #endif
+ 301   3                              break;
+ 302   3      
+ 303   3                  case  ResetRX:
+ 304   3                              CommAccepted();
+ 305   3                              siiRXHardwareReset();
+ 306   3                              break;
+ 307   3                  case  VersionInfo:
+ 308   3                              break;
+ 309   3      
+ 310   3                  case  SetPassiveMode:
+ 311   3                              CommAccepted();
+ 312   3                              qDebugModeOnlyF = TRUE;
+ 313   3      
+ 314   3                              break;
+ 315   3                  case  ResetPassiveMode:
+ 316   3                              CommAccepted();
+ 317   3                              qDebugModeOnlyF = FALSE;
+ 318   3      
+ 319   3                              break;
+ 320   3      
+ 321   3                  default:  PutChar(COMMAND_NOT_SUPPORTED);
+ 322   3              }
+ 323   2      
+ 324   2         }
+ 325   1         qBuffInUse = FALSE;
+ 326   1      }
+ 327          //------------------------------------------------------------------------------
+ 328          // Function Name: GetCommand
+ 329          // Function Description: receives command, makes check sum check
+ 330          //------------------------------------------------------------------------------
+ 331          static BOOL GetCommand( void ){
+ 332   1      BYTE bCommandLength, bCheckSum, i;
+ 333   1      BOOL qResult = FALSE;
+ 334   1      
+ 335   1          if ( RXBuffer[0] & 0x80 )
+ 336   1              bCommandLength = RXBuffer[1] + 6; // 6 is header length
+ 337   1          else
+ 338   1              bCommandLength = 6;
+ 339   1          if( bRxIndex >= RX_BUF_SIZE){ // PC speed is too fast, it sent more BYTEs than
+ 340   2                                        // processed by MCU
+ 341   2              bRxIndex = 0; bCommState = WaitStartRX; bCommTO = 0;
+ 342   2          }
+ 343   1          else if((bCommandLength + 1 + 1) == bRxIndex){  // it's good, but need to check bCheckSum anyway
+ 344   2      
+ 345   2              qBuffInUse = TRUE;
+ 346   2              bCheckSum = 's';
+ 347   2              bRxIndex = 0; bCommState = WaitStartRX; bCommTO = 0;
+ 348   2              CmdPtr = (CmdType *)&RXBuffer[0];
+ 349   2      
+ 350   2              for ( i = 0; i <= bCommandLength; i++)
+ 351   2                  bCheckSum += RXBuffer[i];
+ 352   2              if ( bCheckSum == RXBuffer[bCommandLength + 1] )
+ 353   2                  qResult = TRUE;
+ 354   2              else
+ 355   2                  qBuffInUse = FALSE;
+ 356   2          }
+ 357   1          return qResult;
+ 358   1      
+ 359   1      }
+ 360          //------------------------------------------------------------------------------
+ 361          // Function Name: siiCommunicationHandler
+C51 COMPILER V9.51   UCOM                                                                  05/29/2013 17:36:17 PAGE 7   
+
+ 362          // Function Description: this checks if commad was received makes parsing and
+ 363          //                       executing
+ 364          // Accepts: none
+ 365          // Returns: none
+ 366          // Globals: none
+ 367          //------------------------------------------------------------------------------
+ 368          void siiCommunicationHandler( void ){
+ 369   1          if( GetCommand() )
+ 370   1              ParseCommand();
+ 371   1      }
+ 372          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1286    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      3      10
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =     33    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

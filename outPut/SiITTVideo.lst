@@ -1,0 +1,446 @@
+C51 COMPILER V9.51   SIITTVIDEO                                                            05/29/2013 17:36:14 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIITTVIDEO
+OBJECT MODULE PLACED IN .\outPut\SiITTVideo.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiITTVideo.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJEC
+                    -TEXTEND PRINT(.\outPut\SiITTVideo.lst) TABS(2) PREPRINT(.\outPut\SiITTVideo.i) OBJECT(.\outPut\SiITTVideo.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiITTVideo
+   3          //
+   4          // Module Description:
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiIVidRes.h"
+  15          #include "SiIVidF.h"
+  16          #include "SiIGlob.h"
+  17          #include "SiITTVideo.h"
+  18          #include "SiITrace.h"
+  19          #include "SiIHDMIRX.h"
+  20          #include "SiIAudio.h"
+  21          #include "SiIVidIn.h"
+  22          #include "SiIISR.h"
+  23          #include "SiITTAudio.h"
+  24          
+  25          #ifdef SII_DUMP_UART
+  26          #include <stdio.h>
+  27          #endif
+  28          
+  29          //------------------------------------------------------------------------------
+  30          // Function Name: IsVideoOn
+  31          // Function Description: checks video state machine, state is used when res change
+  32          //                       interrupt is ignorred
+  33          // Accepts: none
+  34          // Returns: BOOL, true if Video is on
+  35          // Globals: SiI_Ctrl.sm_bVideo
+  36          //------------------------------------------------------------------------------
+  37          BOOL siiIsVideoOn( void ) {
+  38   1      BOOL qResult = FALSE;
+  39   1      
+  40   1          if ( (SiI_Ctrl.sm_bVideo == SiI_RX_VS_VideoOn ) || ( SiI_Ctrl.sm_bVideo == SiI_RX_VS_VMNotDetected ))
+  41   1              qResult = TRUE;
+  42   1          return qResult;
+  43   1      }
+  44          //------------------------------------------------------------------------------
+  45          // Function Name: siiSMCheckReqVideoOn
+  46          // Function Description: checks video state machine, state is used when res change
+  47          //                       interrupt is ignorred
+  48          // Accepts: none
+  49          // Returns: BOOL
+  50          // Globals: Read only, SiI_Ctrl.sm_bVideo
+  51          //------------------------------------------------------------------------------
+  52          
+  53          BOOL siiSMCheckReqVideoOn( void ){
+  54   1      BOOL qResult = FALSE;
+C51 COMPILER V9.51   SIITTVIDEO                                                            05/29/2013 17:36:14 PAGE 2   
+
+  55   1      
+  56   1          if ( SiI_Ctrl.sm_bVideo == SiI_RX_VS_ReqVideoOn )
+  57   1              qResult = TRUE;
+  58   1          return qResult;
+  59   1      
+  60   1      }
+  61          //------------------------------------------------------------------------------
+  62          // Function Name:  siiSetSM_ReqGlobalPowerDown
+  63          // Function Description:   Sets SiI_RX_VS_ReqGlobalPowerDown and when SiI_RX_VS_GlobalPowerDown
+  64          //                         will be asserted
+  65          //------------------------------------------------------------------------------
+  66          void siiSetSM_ReqGlobalPowerDown( void ){
+  67   1      
+  68   1          SiI_Ctrl.sm_bVideo = SiI_RX_VS_ReqGlobalPowerDown;
+  69   1          SiI_Ctrl.wVideoTimeOut = 32;
+  70   1      
+  71   1      }
+  72          //------------------------------------------------------------------------------
+  73          // Function Name:  siiSetSM_ReqPowerDown
+  74          // Function Description:   Sets SiI_RX_VS_ReqPowerDown and when SiI_RX_VS_PowerDown
+  75          //                         will be asserted
+  76          //------------------------------------------------------------------------------
+  77          void siiSetSM_ReqPowerDown( void ){
+  78   1      
+  79   1          SiI_Ctrl.sm_bVideo = SiI_RX_VS_ReqPowerDown;
+  80   1          SiI_Ctrl.wVideoTimeOut = 1200;
+  81   1      
+  82   1      }
+  83          //------------------------------------------------------------------------------
+  84          // Function Name:
+  85          // Function Description:
+  86          //------------------------------------------------------------------------------
+  87          void siiSetPowerDownModeAndSetSM_PowerDown( void ){
+  88   1      
+  89   1          SiI_Ctrl.sm_bVideo = SiI_RX_VS_PowerDown;
+  90   1          siiRX_PowerDown( ON );
+  91   1          SiI_Ctrl.wVideoTimeOut = 200;
+  92   1      }
+  93          //------------------------------------------------------------------------------
+  94          // Function Name:
+  95          // Function Description:
+  96          //------------------------------------------------------------------------------
+  97          void siiSetSM_ReqVidInChange( void ){
+  98   1      
+  99   1          SiI_Ctrl.sm_bVideo = SiI_RX_VS_ReqVidInChange;
+ 100   1          SiI_Ctrl.wVideoTimeOut = 64;
+ 101   1      }
+ 102          //------------------------------------------------------------------------------
+ 103          // Function Name: siiMuteVideoAndSetSM_SyncInChange
+ 104          // Function Description: Mutes Video, change Video state machine to SyncInCange,
+ 105          //                       and sets Time after which sync information will be read
+ 106          // Accepts: none
+ 107          // Returns: none
+ 108          // Globals: SiI_Ctrl.sm_bVideo modified
+ 109          //------------------------------------------------------------------------------
+ 110          
+ 111          void siiMuteVideoAndSetSM_SyncInChange( void ){
+ 112   1      
+ 113   1          if ( SiI_Ctrl.sm_bVideo != SiI_RX_VS_GlobalPowerDown ) {
+ 114   2              siiMuteVideo( ON );
+ 115   2              siiRX_PowerDown( OFF );
+ 116   2              SiI_Ctrl.wVideoTimeOut = 100;
+C51 COMPILER V9.51   SIITTVIDEO                                                            05/29/2013 17:36:14 PAGE 3   
+
+ 117   2              SiI_Ctrl.sm_bVideo = SiI_RX_VS_SyncInChange;
+ 118   2          }
+ 119   1      
+ 120   1      }
+ 121          
+ 122          //------------------------------------------------------------------------------
+ 123          // Function Name: siiCheckOverrangeConditions
+ 124          // Function Description: This function used to check sync overrange conditions
+ 125          // Accepts: none
+ 126          // Returns: Error Code
+ 127          // Globals: SiI_Inf:sm_bVideo modified
+ 128          //------------------------------------------------------------------------------
+ 129          /*******************************************************************************
+ 130          ->SiI_RX_VS_SyncStable
+ 131              Check Overrange Conditions
+ 132                  -> SiI_RX_VS_ReqVMDetection
+ 133                  -> SiI_RX_VS_SyncOutOfRange
+ 134          
+ 135          ********************************************************************************/
+ 136          void CheckOutOfRangeConditions ( void ){
+ 137   1      
+ 138   1          if ( siiCheckOutOfRangeConditions( &SiI_Inf.Sync ) )
+ 139   1              SiI_Ctrl.sm_bVideo = SiI_RX_VS_SyncOutOfRange;
+ 140   1          else {
+ 141   2              SiI_Ctrl.sm_bVideo = SiI_RX_VS_ReqVMDetection;
+ 142   2              SiI_Ctrl.wVideoTimeOut = 10;
+ 143   2          }
+ 144   1      }
+ 145          //------------------------------------------------------------------------------
+ 146          // Function Name: siiGetPixClock()
+ 147          // Function Description:  This function checks if video resolution detected,
+ 148          //                        if it wasn't detected then return Zero
+ 149          // Accepts: void
+ 150          // Returns: bPixClock
+ 151          // Globals: read only; SiI_Ctrl.sm_bVideo
+ 152          //------------------------------------------------------------------------------
+ 153          BYTE siiGetPixClock( void ){
+ 154   1      BYTE bPixClock;
+ 155   1          if ( (SiI_Ctrl.sm_bVideo == SiI_RX_VS_VMDetected) ||
+ 156   1               ( SiI_Ctrl.sm_bVideo == SiI_RX_VS_VideoOn)   ||
+ 157   1               ( SiI_Ctrl.sm_bVideo == SiI_RX_VS_ReqVideoOn )   ) {
+ 158   2              bPixClock = siiGetPixClockFromTables( SiI_Inf.bVResId );
+ 159   2          }
+ 160   1          else
+ 161   1              bPixClock = 0;
+ 162   1          return bPixClock;
+ 163   1      }
+ 164          #ifdef SII_NO_RESOLUTION_DETECTION
+ 165          //------------------------------------------------------------------------------
+ 166          // Function Name:
+ 167          // Function Description:
+ 168          //
+ 169          // Accepts: void
+ 170          // Returns: qResult
+ 171          // Globals: read only; SiI_Ctrl.sm_bVideo
+ 172          //------------------------------------------------------------------------------
+ 173          BOOL siiCheckIfVideoOutOfRangeOrVMNotDetected( void ){
+ 174   1      BOOL qResult = FALSE;
+ 175   1      
+ 176   1          if ( (SiI_Ctrl.sm_bVideo == SiI_RX_VS_SyncOutOfRange) ||
+ 177   1               ( SiI_Ctrl.sm_bVideo == SiI_RX_VS_VMNotDetected) )
+ 178   1              qResult = TRUE;
+C51 COMPILER V9.51   SIITTVIDEO                                                            05/29/2013 17:36:14 PAGE 4   
+
+ 179   1      
+ 180   1          return qResult;
+ 181   1      }
+ 182          #endif
+ 183          //------------------------------------------------------------------------------
+ 184          // Function Name:
+ 185          // Function Description:
+ 186          //
+ 187          // Accepts: void
+ 188          // Returns: qResult
+ 189          // Globals: read only; SiI_Ctrl.sm_bVideo
+ 190          //------------------------------------------------------------------------------
+ 191          BOOL siiCheckIfVideoInputResolutionReady( void ){
+ 192   1      BOOL qResult = FALSE;
+ 193   1      
+ 194   1          if ( (SiI_Ctrl.sm_bVideo == SiI_RX_VS_VMDetected) ||
+ 195   1               ( SiI_Ctrl.sm_bVideo == SiI_RX_VS_VideoOn)   ||
+ 196   1               ( SiI_Ctrl.sm_bVideo == SiI_RX_VS_ReqVideoOn )   )
+ 197   1              qResult = TRUE;
+ 198   1      
+ 199   1          return qResult;
+ 200   1      }
+ 201          //------------------------------------------------------------------------------
+ 202          // Function Name: siiVideoResolutionDetection
+ 203          // Function Description: This function is used for Video Resolution detection
+ 204          // Accepts: none
+ 205          // Returns: Error Code
+ 206          // Globals: SiI_Inf:sm_bVideo, bVResId modified
+ 207          //------------------------------------------------------------------------------
+ 208          /********************************************************************************
+ 209          -> SiI_RX_VS_ReqVMDetection
+ 210              Video Resolution Detection
+ 211                  -> SiI_RX_VS_VMDetected
+ 212                  -> SiI_RX_VS_VMNotDetected ( unknown resolution )
+ 213          ********************************************************************************/
+ 214          static void VideoResolutionDetection ( void ){
+ 215   1      BYTE bSearchResult;
+ 216   1      
+ 217   1          bSearchResult = siiVideoModeDetection(&SiI_Inf.bVResId, &SiI_Inf.Sync );
+ 218   1          if ( !bSearchResult ) {  // Mode is not detected
+ 219   2              SiI_Ctrl.sm_bVideo = SiI_RX_VS_VMNotDetected;
+ 220   2      //        siiMuteVideo( OFF ); //YMA change
+ 221   2              siiMuteVideo( ON ); 
+ 222   2          }
+ 223   1          else
+ 224   1              SiI_Ctrl.sm_bVideo = SiI_RX_VS_VMDetected;
+ 225   1          SiI_Ctrl.wVideoTimeOut = 10;
+ 226   1      #ifdef SII_DUMP_UART
+ 227   1          siiPrintVModeParameters( SiI_Inf.bVResId , bSearchResult);
+ 228   1      #endif
+ 229   1      
+ 230   1      }
+ 231          //------------------------------------------------------------------------------
+ 232          // Function Name: PowerDownProcessing
+ 233          // Function Description:
+ 234          //------------------------------------------------------------------------------
+ 235          static void PowerDownProcessing( void ){
+ 236   1      
+ 237   1          siiRX_PowerDown( OFF ); // SCDT doesn't work in PD
+ 238   1      //Wilma has the SCDT doesn't work in PD bug
+ 239   1      /*
+ 240   1          if ( siiCheckClockDetect() ){
+C51 COMPILER V9.51   SIITTVIDEO                                                            05/29/2013 17:36:14 PAGE 5   
+
+ 241   1              siiMuteVideoAndSetSM_SyncInChange();
+ 242   1          }
+ 243   1      */
+ 244   1        if (( siiCheckSyncDetect() )||((SiI_Ctrl.bDevId ==  RX_SiI9133)&&( siiCheckClockDetect() )))
+ 245   1        {
+ 246   2              siiMuteVideoAndSetSM_SyncInChange();
+ 247   2          }
+ 248   1          else {
+ 249   2              siiSetPowerDownModeAndSetSM_PowerDown();
+ 250   2          }
+ 251   1      }
+ 252          
+ 253          //------------------------------------------------------------------------------
+ 254          // Function Name: SyncInChangeProcessing
+ 255          // Function Description:
+ 256          //------------------------------------------------------------------------------
+ 257          static void SyncInChangeProcessing( void ){
+ 258   1      
+ 259   1      
+ 260   1          if ( siiCheckSyncDetect() ){
+ 261   2              SiI_Ctrl.sm_bVideo = SiI_RX_VS_SyncStable;
+ 262   2              SiI_Ctrl.wVideoTimeOut = 10;
+ 263   2              siiGetSyncInfo( &SiI_Inf.Sync );
+ 264   2      #ifdef SII_BUG_PHOEBE_AUTOSW_BUG
+                      if ( ( SiI_Ctrl.bDevId == RX_SiI9023 ) || ( SiI_Ctrl.bDevId == RX_SiI9033 )  ) {
+                          siiSetAutoSWReset ( OFF );
+                          siiTurnAudioOffAndSetSM_AudioOff();
+                      }
+              #endif
+ 270   2          }
+ 271   1          else {
+ 272   2      
+ 273   2              siiSetSM_ReqPowerDown();
+ 274   2      
+ 275   2          }
+ 276   1      }
+ 277          //------------------------------------------------------------------------------
+ 278          // Function Name: siiSetResDepVideoPath
+ 279          // Function Description: This function is used to set Res Dependent Video path
+ 280          // Accepts: none
+ 281          // Returns: Error Code
+ 282          // Globals: SiI_Inf:sm_bVideo, bVResId modified
+ 283          //------------------------------------------------------------------------------
+ 284          /********************************************************************************
+ 285          -> SiI_RX_VS_VMDetected
+ 286              Set Video Dependent Video Path
+ 287                  -> SiI_RX_VS_VideoOn
+ 288                  -> SiI_RX_VS_SyncInChange
+ 289          *******************************************************************************/
+ 290          static void SetResDepVideoPath ( void ) {
+ 291   1      
+ 292   1          if ( !(SiI_Inf.bGlobStatus & SiI_RX_GlobalHDMI_Detected) ) {
+ 293   2              siiSetAnalogAudioMux( SiI_Ctrl.bVidInChannel );
+ 294   2              if ( SiI_Inf.AVI.bInputColorSpace != SiI_RX_ICP_RGB ){
+ 295   3                  SiI_Inf.AVI.bInputColorSpace = SiI_RX_ICP_RGB;
+ 296   3                  siiSetVideoPathColorSpaceDependent( SiI_Ctrl.VideoF.bOutputVideoPath, SiI_Inf.AVI.bInputColorS
+             -pace );
+ 297   3                                      // As color space has changed, it's need
+ 298   3                                      // a call to config. Video Path non res. dependent Vid. Path
+ 299   3              }
+ 300   2          }
+ 301   1      
+C51 COMPILER V9.51   SIITTVIDEO                                                            05/29/2013 17:36:14 PAGE 6   
+
+ 302   1          else
+ 303   1              siiSetDigitalAudioMux();
+ 304   1          siiSetVidResDependentVidOutputFormat( SiI_Inf.bVResId, SiI_Ctrl.VideoF.bOutputVideoPath, SiI_Inf.AVI.b
+             -AVI_State );
+ 305   1          SiI_Ctrl.sm_bVideo = SiI_RX_VS_ReqVideoOn;
+ 306   1          SiI_Ctrl.wVideoTimeOut = 32;
+ 307   1      
+ 308   1      
+ 309   1      }
+ 310          //------------------------------------------------------------------------------
+ 311          // Function Name:
+ 312          // Function Description:
+ 313          //------------------------------------------------------------------------------
+ 314          static void CheckIfResUnMuteVideoIfOK( void ){
+ 315   1      SyncInfoType SyncInfo;
+ 316   1      
+ 317   1          siiGetSyncInfo( &SyncInfo );  // in case if Pix Replication was changed
+ 318   1                                        // need to check sync info wasn't changed
+ 319   1                                        // res change interrupt is ignorred for this
+ 320   1                                        // state of Video state machine
+ 321   1          if ( siiCompareNewOldSync( &SiI_Inf.Sync, &SyncInfo ) ){
+ 322   2              siiMuteVideo( OFF );
+ 323   2              SiI_Ctrl.sm_bVideo = SiI_RX_VS_VideoOn;
+ 324   2      //        InitTX();  // TBD: This User call should be removed - Needed for Oscar board only
+ 325   2          }
+ 326   1          else
+ 327   1              siiMuteVideoAndSetSM_SyncInChange();
+ 328   1      }
+ 329          //------------------------------------------------------------------------------
+ 330          // Function Name: siiSetGlobalVideoMuteAndSM_Video
+ 331          // Function Description:
+ 332          //------------------------------------------------------------------------------
+ 333          
+ 334          void siiSetGlobalVideoMuteAndSM_Video ( BOOL qOn  )
+ 335          {
+ 336   1        if ( qOn ) {
+ 337   2          siiMuteVideo( ON );   
+ 338   2              SiI_Ctrl.sm_bVideo = SiI_RX_VS_HoldVideoMute;
+ 339   2          }
+ 340   1        else {
+ 341   2              siiMuteVideo( OFF );
+ 342   2              SiI_Ctrl.sm_bVideo = SiI_RX_VS_VideoOn;
+ 343   2      
+ 344   2          }
+ 345   1      
+ 346   1      
+ 347   1      }
+ 348          //------------------------------------------------------------------------------
+ 349          // Function Name:
+ 350          // Function Description:
+ 351          //------------------------------------------------------------------------------
+ 352          
+ 353          BYTE siiTTVideoHandler( BOOL qTimeOut ){
+ 354   1      BYTE bECode = FALSE;
+ 355   1      
+ 356   1          switch ( SiI_Ctrl.sm_bVideo ){
+ 357   2              case SiI_RX_VS_ReqPowerDown:
+ 358   2                      if ( qTimeOut ) {
+ 359   3                          siiTurnAudioOffAndSetSM_AudioOff();
+ 360   3                          siiSetPowerDownModeAndSetSM_PowerDown();
+ 361   3      #ifdef SII_DUMP_UART
+ 362   3                          printf("\nAudioOff");
+C51 COMPILER V9.51   SIITTVIDEO                                                            05/29/2013 17:36:14 PAGE 7   
+
+ 363   3                          printf("\nPowerDown");
+ 364   3      #endif
+ 365   3                      }
+ 366   2                      break;
+ 367   2              case SiI_RX_VS_PowerDown:
+ 368   2                      if ( qTimeOut )
+ 369   2                          PowerDownProcessing();
+ 370   2                      break;
+ 371   2              case SiI_RX_VS_SyncInChange:
+ 372   2                      if ( qTimeOut )
+ 373   2                          SyncInChangeProcessing();
+ 374   2                      break;
+ 375   2              case SiI_RX_VS_SyncStable:
+ 376   2      #ifdef SII_BUG_PHOEBE_AUTOSW_BUG
+                              if ( ( SiI_Ctrl.bDevId == RX_SiI9023 ) || ( SiI_Ctrl.bDevId == RX_SiI9033 ) )
+                                  siiCheckTransitionToDVIModeAndResetHDMIInfoIfConfirmed();
+              #endif
+ 380   2                      CheckOutOfRangeConditions();
+ 381   2                      break;
+ 382   2              case SiI_RX_VS_ReqVMDetection:
+ 383   2                      VideoResolutionDetection();
+ 384   2                      break;
+ 385   2              case SiI_RX_VS_VMDetected:
+ 386   2                      SetResDepVideoPath();
+ 387   2                      break;
+ 388   2              case SiI_RX_VS_ReqVideoOn:
+ 389   2                      CheckIfResUnMuteVideoIfOK( );
+ 390   2                      break;
+ 391   2              case SiI_RX_VS_ReqVidInChange:
+ 392   2                      if ( qTimeOut )
+ 393   2                          siiSetVideoInput( SiI_Ctrl.bVidInChannel );
+ 394   2                      break;
+ 395   2              case SiI_RX_VS_ReqGlobalPowerDown:
+ 396   2                      siiMuteVideo( ON );
+ 397   2                      siiRX_DisableTMDSCores();
+ 398   2                      siiRX_PowerDown( ON );
+ 399   2                      SiI_Ctrl.sm_bVideo = SiI_RX_VS_GlobalPowerDown;
+ 400   2                      break;
+ 401   2          case SiI_RX_VS_HoldVideoMute: //do nothing
+ 402   2              break;
+ 403   2      
+ 404   2          }
+ 405   1          return bECode;
+ 406   1      
+ 407   1      }
+ 408          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    637    ----
+   CONSTANT SIZE    =     21    ----
+   XDATA SIZE       =   ----      11
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       6
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

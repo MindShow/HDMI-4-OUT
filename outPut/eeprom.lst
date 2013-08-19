@@ -1,0 +1,314 @@
+C51 COMPILER V9.00   EEPROM                                                                07/31/2013 09:43:00 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE EEPROM
+OBJECT MODULE PLACED IN .\outPut\eeprom.obj
+COMPILER INVOKED BY: D:\keil\C51\BIN\C51.EXE bsp\eeprom.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND 
+                    -PRINT(.\outPut\eeprom.lst) TABS(2) PREPRINT(.\outPut\eeprom.i) OBJECT(.\outPut\eeprom.obj)
+
+line level    source
+
+   1          
+   2          #include "reg52.h"
+   3          #include "intrins.h"
+   4          #include "typedef.h"
+   5          #include "CommonLibrary.h"
+   6          #include "io.h"
+   7          #include "eeprom.h"
+   8          #include "uart.h"
+   9          
+  10          // /*eeprom I2C Interface*/
+  11          //  sbit SCL1 = P1^1;
+  12          //  sbit SDA1 = P1^2;
+  13          
+  14          
+  15          /**--------------------------------------------------------------------------------
+  16          　调用方式：SomeNOP(uchar n)　﹫2010/07/15
+  17          　函数说明：IIC延时函数，I2C专用
+  18          　---------------------------------------------------------------------------------*/
+  19          void eeprom_SomeNOP(uchar n)
+  20          {
+  21   1         data uchar i;
+  22   1         for(i=0;i<n;i++)
+  23   1         {
+  24   2           _nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();
+  25   2         }
+  26   1      } 
+  27          
+  28          /**--------------------------------------------------------------------------------
+  29          　调用方式：void　I2CStart(void)　﹫2010/07/15
+  30          　函数说明：IIC启动函数，I2C专用
+  31          　---------------------------------------------------------------------------------*/
+  32          void eeprom_I2CStart(void)  
+  33          {
+  34   1        //EA=0;
+  35   1        SDA1=1; 
+  36   1        eeprom_SomeNOP(5);
+  37   1        SCL1=1;
+  38   1        eeprom_SomeNOP(5);
+  39   1        SDA1=0;
+  40   1        eeprom_SomeNOP(5);
+  41   1        SCL1=0; 
+  42   1      }
+  43          /**--------------------------------------------------------------------------------
+  44          　调用方式：void　I2CStop(void)　﹫2010/07/15
+  45          　函数说明：IIC停止函数，I2C专用
+  46          　---------------------------------------------------------------------------------*/
+  47          void eeprom_I2CStop(void)
+  48          {
+  49   1        SDA1=0; 
+  50   1        eeprom_SomeNOP(5);
+  51   1        SCL1=1;
+  52   1        eeprom_SomeNOP(5);
+  53   1        SDA1=1;
+  54   1        eeprom_SomeNOP(5);
+C51 COMPILER V9.00   EEPROM                                                                07/31/2013 09:43:00 PAGE 2   
+
+  55   1        SCL1=1;
+  56   1        eeprom_SomeNOP(5);
+  57   1        //EA=1;
+  58   1        eeprom_SomeNOP(5);
+  59   1        Delay_ms(5);
+  60   1      }
+  61          
+  62          /**--------------------------------------------------------------------------------
+  63          　调用方式：bit　I2CAck(void)　﹫2010/07/15
+  64          　函数说明：IIC响应函数，I2C专用，等待从器件接收方的应答
+  65          　---------------------------------------------------------------------------------*/
+  66          bit eeprom_WaitAck(void)
+  67          {
+  68   1        data uchar errtime = 255;//因故障接收方无ACK,超时值为255
+  69   1        SDA1=1;
+  70   1        eeprom_SomeNOP(5);
+  71   1        SCL1=0;
+  72   1        eeprom_SomeNOP(5);
+  73   1        while(SDA1)      //sda=1,slave is no ack
+  74   1        { errtime--;
+  75   2          if(!errtime)
+  76   2          {
+  77   3           eeprom_I2CStop();
+  78   3           //SBUF=0x11;
+  79   3           return 0;
+  80   3          }
+  81   2        }
+  82   1        SCL1=1;
+  83   1          eeprom_SomeNOP(5);
+  84   1        //SystemError=0;
+  85   1        SCL1=0;
+  86   1        return 1;  
+  87   1      }
+  88          
+  89          /**--------------------------------------------------------------------------------
+  90          　调用方式：void　SendAck(void)　﹫2010/07/15
+  91          　函数说明：发送响应函数函数，I2C专用，主器件为接收方，从器件为发送方时，应答信号。
+  92          　---------------------------------------------------------------------------------*/
+  93          
+  94          void eeprom_SendAck(void)
+  95          {
+  96   1        SCL1=0;
+  97   1        eeprom_SomeNOP(4);
+  98   1        SDA1=0;
+  99   1        eeprom_SomeNOP(4);
+ 100   1        SCL1=1;
+ 101   1        eeprom_SomeNOP(4);
+ 102   1        SCL1=0;
+ 103   1        eeprom_SomeNOP(4);
+ 104   1      }  
+ 105          
+ 106          /**--------------------------------------------------------------------------------
+ 107          　调用方式：void　SendNotAck(void)　﹫2010/07/15
+ 108          　函数说明：发送无响应函数，I2C专用，主器件为接收方，从器件为发送方时，非应答信号。
+ 109          --------------------------------------------------------------------------------*/
+ 110          void eeprom_SendNotAck(void)
+ 111          {
+ 112   1        SCL1=0;
+ 113   1        eeprom_SomeNOP(4);
+ 114   1        SDA1=1;
+ 115   1        eeprom_SomeNOP(4);
+ 116   1        SCL1=1;
+C51 COMPILER V9.00   EEPROM                                                                07/31/2013 09:43:00 PAGE 3   
+
+ 117   1        eeprom_SomeNOP(4);
+ 118   1        SCL1=0;
+ 119   1        eeprom_SomeNOP(4);
+ 120   1      }
+ 121          /**--------------------------------------------------------------------------------
+ 122          　调用方式：void　I2CSend(uchar　ch)　﹫2010/07/15
+ 123          　函数说明：IIC发送字节函数，I2C专用
+ 124          ---------------------------------------------------------------------------------*/
+ 125          void eeprom_I2CSendByte(unsigned char Data)
+ 126          {
+ 127   1        uchar i=8;
+ 128   1        while(i--)
+ 129   1        { 
+ 130   2          SCL1=0;
+ 131   2          eeprom_SomeNOP(1);
+ 132   2          SDA1=(bit)(Data&0x80);
+ 133   2          Data<<=1;
+ 134   2          eeprom_SomeNOP(5);
+ 135   2          SCL1=1;
+ 136   2          eeprom_SomeNOP(5);
+ 137   2          }
+ 138   1            SCL1=0;
+ 139   1      }
+ 140          
+ 141          /**--------------------------------------------------------------------------------
+ 142          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 143          　函数说明：IIC接收字节函数，I2C专用
+ 144          ---------------------------------------------------------------------------------*/
+ 145          uchar eeprom_I2CReceiveByte(void)
+ 146          {
+ 147   1        uchar i=8;
+ 148   1        uchar Data=0;
+ 149   1        SDA1=1;
+ 150   1        while(i--)
+ 151   1        {
+ 152   2          Data<<=1;
+ 153   2          SCL1=0;
+ 154   2          eeprom_SomeNOP(5);
+ 155   2          SCL1=1;
+ 156   2          eeprom_SomeNOP(5);
+ 157   2          Data|=SDA1;
+ 158   2        }
+ 159   1        SCL1=0;
+ 160   1        return Data;
+ 161   1      }
+ 162          /**--------------------------------------------------------------------------------
+ 163          　调用方式：uchar　I2CWrite1(void)　﹫2010/07/15
+ 164          　函数说明：IIC写操作函数，I2C专用
+ 165          ---------------------------------------------------------------------------------*/
+ 166          /*
+ 167          void eeprom_I2CWritep(uchar DeviceAdd,uchar PtrAdd,uchar *Data,unsigned int n)
+ 168          {
+ 169            unsigned int i=0;
+ 170            eeprom_I2CStart();
+ 171            eeprom_I2CSendByte(DeviceAdd);
+ 172              eeprom_WaitAck();
+ 173            eeprom_I2CSendByte(PtrAdd);
+ 174            eeprom_WaitAck();
+ 175            for(i=0;i<n;i++)
+ 176              {
+ 177                eeprom_I2CSendByte(*Data++);
+ 178                  eeprom_WaitAck();
+C51 COMPILER V9.00   EEPROM                                                                07/31/2013 09:43:00 PAGE 4   
+
+ 179              }
+ 180            eeprom_I2CStop();
+ 181          }
+ 182          /**--------------------------------------------------------------------------------
+ 183          　调用方式：uchar　I2CWrite(void)　﹫2010/07/15
+ 184          　函数说明：IIC写操作函数，I2C专用
+ 185          ---------------------------------------------------------------------------------*/
+ 186          
+ 187          // void eeprom_I2CWrite(uchar DeviceAdd,uchar PtrAdd,uchar Data)
+ 188          // {
+ 189          //  eeprom_I2CStart();
+ 190          //  eeprom_I2CSendByte(DeviceAdd);
+ 191          //  eeprom_WaitAck();
+ 192          //  eeprom_I2CSendByte(PtrAdd);
+ 193          //  eeprom_WaitAck();
+ 194          //  eeprom_I2CSendByte(Data);
+ 195          //  eeprom_WaitAck();
+ 196          //  eeprom_I2CStop();
+ 197          // }
+ 198          /**--------------------------------------------------------------------------------
+ 199          　调用方式：uchar　I2CWrite(void)　﹫2013/07/16
+ 200          　函数说明：IIC写操作函数，I2C专用
+ 201          ---------------------------------------------------------------------------------*/
+ 202          void eeprom_I2CWrite_PCF8574(uchar DeviceAdd,uchar Data)
+ 203          {
+ 204   1         eeprom_I2CStart();
+ 205   1         eeprom_I2CSendByte(DeviceAdd);
+ 206   1         eeprom_WaitAck();
+ 207   1        
+ 208   1         eeprom_I2CSendByte(Data);
+ 209   1         eeprom_WaitAck();
+ 210   1         eeprom_I2CStop();
+ 211   1      }
+ 212          /**--------------------------------------------------------------------------------
+ 213          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 214          　函数说明：IIC读操作函数，I2C专用
+ 215            参数说明：Data指针--存放读取的数据；n---读取的字节数
+ 216            返回参数：0--读取失败；1--读取成功
+ 217          ---------------------------------------------------------------------------------*/
+ 218          
+ 219          bit eeprom_I2CReadp(uchar DeviceAdd,uchar PtrAdd,uchar *Data,unsigned int n)
+ 220          {
+ 221   1        unsigned int i=0;
+ 222   1        bit tmp;
+ 223   1        eeprom_I2CStart();
+ 224   1        eeprom_I2CSendByte(DeviceAdd);
+ 225   1        tmp = eeprom_WaitAck();  //return 0 or 1
+ 226   1        eeprom_I2CSendByte(PtrAdd);
+ 227   1        tmp = eeprom_WaitAck();
+ 228   1      
+ 229   1        eeprom_I2CStart();
+ 230   1        eeprom_I2CSendByte(DeviceAdd+1);
+ 231   1        tmp = eeprom_WaitAck();
+ 232   1        for(i=0;i<n;i++)
+ 233   1          {
+ 234   2            *Data++=eeprom_I2CReceiveByte();
+ 235   2            eeprom_SendAck();
+ 236   2          }
+ 237   1        *Data++=eeprom_I2CReceiveByte();
+ 238   1        eeprom_SendNotAck();
+ 239   1        eeprom_I2CStop();
+ 240   1        return tmp;
+C51 COMPILER V9.00   EEPROM                                                                07/31/2013 09:43:00 PAGE 5   
+
+ 241   1      }
+ 242          /**--------------------------------------------------------------------------------
+ 243          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 244          　函数说明：IIC读操作函数，I2C专用
+ 245          ---------------------------------------------------------------------------------*/
+ 246          
+ 247          // uchar eeprom_I2CRead(uchar DeviceAdd,uchar PtrAdd)
+ 248          // {
+ 249          //  uchar Data;
+ 250          //  eeprom_I2CStart();
+ 251          //  eeprom_I2CSendByte(DeviceAdd);
+ 252          //  eeprom_WaitAck();
+ 253          //  eeprom_I2CSendByte(PtrAdd);
+ 254          //     eeprom_WaitAck();
+ 255          //  eeprom_I2CStart();
+ 256          //  eeprom_I2CSendByte(DeviceAdd+1);
+ 257          //  eeprom_WaitAck();
+ 258          //  Data=eeprom_I2CReceiveByte();
+ 259          //  eeprom_SendNotAck();
+ 260          //  eeprom_I2CStop();
+ 261          //  return Data;
+ 262          // }
+ 263          /*********************************************************
+ 264          // Description: 读取PCF8574T
+ 265          // Argument   : none
+ 266          // Return     : 8 port status of pcf8574T
+ 267          // note       : none
+ 268          *********************************************************/
+ 269          uchar eeprom_I2CRead_PCF8574T(void)
+ 270          {
+ 271   1        uchar Data;
+ 272   1        eeprom_I2CStart();  //strat
+ 273   1        eeprom_I2CSendByte(PCF8574_ADDR_R ); //read addr
+ 274   1        eeprom_WaitAck();                    //ack from pcf8574t
+ 275   1        
+ 276   1        Data=eeprom_I2CReceiveByte();      //receive data
+ 277   1        //sendByte(Data);
+ 278   1        eeprom_SendNotAck();               //no ack from master
+ 279   1        eeprom_I2CStop();                  //i2c stop
+ 280   1        return Data;
+ 281   1      }
+ 282          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    471    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      11
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

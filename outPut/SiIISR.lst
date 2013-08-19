@@ -1,0 +1,457 @@
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIISR
+OBJECT MODULE PLACED IN .\outPut\SiIISR.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIISR.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXT
+                    -END PRINT(.\outPut\SiIISR.lst) TABS(2) PREPRINT(.\outPut\SiIISR.i) OBJECT(.\outPut\SiIISR.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name:  SiIISR.c
+   3          // ---
+   4          // Module Description:  serves RX interrupts
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiIGlob.h"
+  15          #include "SiIISR.h"
+  16          #include "SiIHAL.h"
+  17          #include "SiIRXIO.h"
+  18          #include "SiIHDMIRX.h"
+  19          #include "SiITTAudio.h"
+  20          #include "SiITTVideo.h"
+  21          #include "SiIInfoPkts.h"
+  22          #include "SiITTInfoPkts.h"
+  23          #include "SiIHDCP.h"
+  24          #include "SiITTasks.h"
+  25          #include "SiIAudio.h"
+  26          #include "SiIDeepColor.h"
+  27          
+  28          #ifdef SII_DUMP_UART
+  29          #include <stdio.h>
+  30          #endif
+  31          
+  32          //------------------------------------------------------------------------------
+  33          // Function Name: siiTraceRXInterrupts
+  34          // Function Description: This function reads RX interrupts and used for debugging purpose only
+  35          //
+  36          // Accepts: none
+  37          // Returns: none
+  38          // Globals: none
+  39          //------------------------------------------------------------------------------
+  40          #ifdef SII_DUMP_UART
+  41          void siiTraceRXInterrupts ( void ){
+  42   1      BYTE i, abIntrData[7];
+  43   1      
+  44   1          siiReadBlockHDMIRXP0( RX_HDMI_INT_GR1_ADDR - 1, 5, abIntrData );  // including main status reg
+  45   1          siiReadBlockHDMIRXP0( RX_HDMI_INT_GR2_ADDR, 2, &abIntrData[5] );
+  46   1          printf ("\n RX ints:");
+  47   1          for ( i = 0; i < 7; i++ )
+  48   1              printf (" 0x%02X", (int) abIntrData[i] );
+  49   1      
+  50   1      }
+  51          #endif
+  52          //------------------------------------------------------------------------------
+  53          // Function Name: CheckAVIHader
+  54          // Function Description: checks if Id header byte has data
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 2   
+
+  55          //------------------------------------------------------------------------------
+  56          static BOOL CheckAVIHader( void ){
+  57   1      BOOL qResult = FALSE;
+  58   1          if ( siiReadByteHDMIRXP1( RX_AVI_IF_ADDR ) != 0 )
+  59   1              qResult = TRUE;
+  60   1          return qResult;
+  61   1      }
+  62          //------------------------------------------------------------------------------
+  63          // Function Name: SetNoAVIIntrrupts
+  64          // Function Description: Enable or Disable NoAVI interrupt
+  65          //------------------------------------------------------------------------------
+  66          static void SetNoAVIIntrrupts( BOOL qOn ){
+  67   1          if ( qOn ) {
+  68   2              siiIIC_RX_RWBitsInByteP0( RX_HDMI_INT_ST4_MASK_ADDR, RX_BIT_MASK_NO_AVI_INTR, SET );
+  69   2              SiI_Ctrl.bIgnoreIntr |= qcIgnoreNoAVI;
+  70   2          }
+  71   1          else {
+  72   2              siiIIC_RX_RWBitsInByteP0( RX_HDMI_INT_ST4_MASK_ADDR, RX_BIT_MASK_NO_AVI_INTR, CLR );
+  73   2              SiI_Ctrl.bIgnoreIntr &= (~qcIgnoreNoAVI);
+  74   2          }
+  75   1      }
+  76          //------------------------------------------------------------------------------
+  77          // Function Name: AVI_And_NoAVI_WorkAround
+  78          // Function Description: this function is used to resolve conflict situation
+  79          //                        when AVIChange an NoAVI both are set
+  80          //------------------------------------------------------------------------------
+  81          static void AVI_And_NoAVI_WorkAround( BYTE * bpInfoFramesIntrrupts ){
+  82   1      
+  83   1          if (( *bpInfoFramesIntrrupts & NoAVI_Mask ) && ( *bpInfoFramesIntrrupts & AVI_Mask ) ){
+  84   2              if ( CheckAVIHader() )
+  85   2                  *bpInfoFramesIntrrupts &= (~NoAVI_Mask );
+  86   2              else
+  87   2                  *bpInfoFramesIntrrupts &= (~AVI_Mask );
+  88   2          }
+  89   1          if ( *bpInfoFramesIntrrupts & NoAVI_Mask )
+  90   1              SetNoAVIIntrrupts( OFF );
+  91   1          if ( *bpInfoFramesIntrrupts & AVI_Mask )
+  92   1              SetNoAVIIntrrupts( ON );
+  93   1      
+  94   1      }
+  95          
+  96          //------------------------------------------------------------------------------
+  97          // Function Name: ProcessChangeBetween_DVI_HDMI_Modes
+  98          // Function Description:  Processing when RX mode changed between HDMI/DVI
+  99          //------------------------------------------------------------------------------
+ 100          static void ProcessChangeBetween_DVI_HDMI_Modes( void ){
+ 101   1      
+ 102   1          if ( siiIsHDMI_Mode()){
+ 103   2      
+ 104   2              SiI_Inf.bGlobStatus |= SiI_RX_GlobalHDMI_Detected;
+ 105   2              siiSetSM_ReqAudio();
+ 106   2              siiInitACPCheckTimeOut ();
+ 107   2          }
+ 108   1          else {
+ 109   2      
+ 110   2              SiI_Inf.bGlobStatus &= ( ~( SiI_RX_GlobalHDMI_Detected | SiI_RX_GlobalHDMI_ACP ) );
+ 111   2              SiI_Inf.bGlobStatus |= SiI_RX_GlobalHDMI_NoAVIPacket;
+ 112   2              SiI_Inf.bNewInfoPkts = 0;
+ 113   2              siiResetACPPacketData();
+ 114   2              SetNoAVIIntrrupts( OFF );
+ 115   2          }
+ 116   1      }
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 3   
+
+ 117          #ifdef SII_BUG_PHOEBE_AUTOSW_BUG
+              //------------------------------------------------------------------------------
+              // Function Name: siiCheckTransitionToDVIModeAndResetHDMIInfoIfConfirmed
+              // Function Description:
+              //
+              // Accepts:
+              // Returns:
+              // Globals:
+              //------------------------------------------------------------------------------
+              
+              void siiCheckTransitionToDVIModeAndResetHDMIInfoIfConfirmed( void ){
+              
+                  if ( !siiIsHDMI_Mode() ){
+              
+                      SiI_Inf.bGlobStatus &= ( ~( SiI_RX_GlobalHDMI_Detected | SiI_RX_GlobalHDMI_ACP ) );
+                      SiI_Inf.bGlobStatus |= SiI_RX_GlobalHDMI_NoAVIPacket;
+                      SiI_Inf.bNewInfoPkts = 0;
+                      siiTurnAudioOffAndSetSM_AudioOff();
+                      SetNoAVIIntrrupts( OFF );
+                      siiClearAVI_Info( &SiI_Inf.AVI );
+              
+                  }
+              }
+              #endif
+ 141          //------------------------------------------------------------------------------
+ 142          // Function Name: EnableHDCPCheckUsingVSyncInt
+ 143          // Function Description: This function enables using VSync Interrupts for processing HDCP errors
+ 144          //                        on field to field base or diable the mode with switching wait for isolated HDCP
+ 145          //                        Failure
+ 146          //------------------------------------------------------------------------------
+ 147          static void EnableCheckHDCPFailureWithVSyncRate ( BOOL qOn ){
+ 148   1      
+ 149   1          if ( qOn ){
+ 150   2              SiI_Ctrl.bHDCPFailFrmCnt = 1;
+ 151   2              SiI_Ctrl.bIgnoreIntr |= qcIgnoreHDCPFail; // don't clear HDCP Failure Int if
+ 152   2                                                        // this bit is set
+ 153   2              siiIIC_RX_RWBitsInByteP0( RX_HDMI_INT_ST2_MASK_ADDR, RX_BIT_VSYNC, SET );
+ 154   2              siiIIC_RX_RWBitsInByteP0( RX_HDMI_INT_ST4_MASK_ADDR, RX_BIT_HDCP_FAILED, CLR );
+ 155   2          }
+ 156   1          else {
+ 157   2              SiI_Ctrl.bHDCPFailFrmCnt = 0;
+ 158   2              SiI_Ctrl.bIgnoreIntr &= (~qcIgnoreHDCPFail);
+ 159   2              siiIIC_RX_RWBitsInByteP0( RX_HDMI_INT_ST2_MASK_ADDR, RX_BIT_VSYNC, CLR );
+ 160   2              siiIIC_RX_RWBitsInByteP0( RX_HDMI_INT_ST4_MASK_ADDR, RX_BIT_HDCP_FAILED, SET );
+ 161   2          }
+ 162   1      
+ 163   1      }
+ 164          //------------------------------------------------------------------------------
+ 165          // Function Name: GotNConsecutiveVSyncHDCPFailure
+ 166          // Function Description: If HDCP Failure is repeated on frame to frame base
+ 167          //                       and reached threshold then function return TRUE
+ 168          //                       The function is called if: VSync && HDCPFailureInt
+ 169          //------------------------------------------------------------------------------
+ 170          static BOOL GotNConsecutiveVSyncHDCPFailure ( void ){
+ 171   1      BOOL qResult = FALSE;
+ 172   1      
+ 173   1          if (!DetectHDCPStuck())
+ 174   1              SiI_Ctrl.bHDCPFailFrmCnt++;
+ 175   1              if ( SiI_Ctrl.bHDCPFailFrmCnt == cbHDCPFailFrmThres )
+ 176   1                  qResult = TRUE;
+ 177   1          return qResult;
+ 178   1      }
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 4   
+
+ 179          
+ 180          //------------------------------------------------------------------------------
+ 181          // Function Name: DetectHDCPStuck
+ 182          // Function Description:
+ 183          //------------------------------------------------------------------------------
+ 184          static BOOL DetectHDCPStuck( void ){
+ 185   1      WORD wHDCPErrors;
+ 186   1      BOOL qError = FALSE;
+ 187   1      
+ 188   1          wHDCPErrors =   siiReadWordHDMIRXP0 ( RX_HDCP_ERR_ADDR );
+ 189   1          if ( !wHDCPErrors ){
+ 190   2              qError = TRUE;
+ 191   2          }
+ 192   1          return qError;
+ 193   1      }
+ 194          //------------------------------------------------------------------------------
+ 195          // Function Name: GotNConsecutiveVSyncHDCPStuckInterrupt
+ 196          // Function Description:
+ 197          //------------------------------------------------------------------------------
+ 198          static BYTE GotNConsecutiveHDCPStuckInterrupt ( void ) {
+ 199   1      BYTE bError = FALSE;
+ 200   1      
+ 201   1          if ( DetectHDCPStuck()) {
+ 202   2              SiI_Ctrl.bHDCPStuckConfirmCnt++;
+ 203   2              if ( SiI_Ctrl.bHDCPStuckConfirmCnt == cbHDCPStuckConfirmThres )
+ 204   2                  bError = SiI_EC_HDCP_StuckInterrupt;
+ 205   2          }
+ 206   1          else
+ 207   1              SiI_Ctrl.bHDCPStuckConfirmCnt = 0;
+ 208   1      
+ 209   1          return bError;
+ 210   1      }
+ 211          //------------------------------------------------------------------------------
+ 212          // Function Name: HDCPErrorHandler
+ 213          // Function Description:  This function process HDCP errors and requests HDCP
+ 214          //                        re-authentication if it reached threshold
+ 215          //------------------------------------------------------------------------------
+ 216          static BYTE HDCPErrorHandler ( BYTE bHDCPFailInt, BYTE bVSyncInt ) {
+ 217   1      BYTE bError = FALSE;
+ 218   1      
+ 219   1          if ( SiI_Ctrl.bIgnoreIntr & qcIgnoreHDCPFail ) {
+ 220   2              if (  bVSyncInt ) {
+ 221   3                  if ( bHDCPFailInt ) {
+ 222   4                      siiClearBCHCounter();
+ 223   4                      bError = GotNConsecutiveHDCPStuckInterrupt();
+ 224   4                      if ( GotNConsecutiveVSyncHDCPFailure ()){
+ 225   5      #ifdef SII_DUMP_UART
+ 226   5              printf ( "\n N HDCP Conseq failures!!");
+ 227   5      #endif
+ 228   5                          ReqReAuthenticationRX();  // Clearing Ri will be notification for host to start
+ 229   5                          EnableCheckHDCPFailureWithVSyncRate( OFF );
+ 230   5                      }
+ 231   4                  }
+ 232   3                  else {
+ 233   4                      EnableCheckHDCPFailureWithVSyncRate( OFF );
+ 234   4                  }
+ 235   3              }
+ 236   2          }
+ 237   1          else {
+ 238   2              if ( bHDCPFailInt ) {
+ 239   3                  siiClearBCHCounter();
+ 240   3                  bError = GotNConsecutiveHDCPStuckInterrupt();
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 5   
+
+ 241   3                  EnableCheckHDCPFailureWithVSyncRate( ON );
+ 242   3              }
+ 243   2          }
+ 244   1          return bError;
+ 245   1      }
+ 246          
+ 247          //------------------------------------------------------------------------------
+ 248          // Function Name: HandleDeepColorError
+ 249          // Function Description:  Just clear the Deep Color error bit for now
+ 250          //------------------------------------------------------------------------------
+ 251          static void HandleDeepColorError ( void ) {
+ 252   1          siiWriteByteHDMIRXP0( RX_HDMI_INT_ST6_ADDR, RX_BIT_DC_ERROR );
+ 253   1      }
+ 254          
+ 255          //------------------------------------------------------------------------------
+ 256          // Function Name: RXInterruptHandler
+ 257          // Function Description: reading, clearing and dispatching RX interrupts
+ 258          //------------------------------------------------------------------------------
+ 259          static BYTE RXInterruptHandler( void ) {
+ 260   1      BYTE abIntrData[4];
+ 261   1      BYTE bError;
+ 262   1      
+ 263   1      // Handling second group interrupts
+ 264   1      
+ 265   1        siiReadBlockHDMIRXP0( RX_HDMI_INT_GR2_ADDR, 2, abIntrData ); //YMA NOTE R 0x7B, 0x7C
+ 266   1      
+ 267   1      //YMA should be bug, AAC is not in abIntrData[1]
+ 268   1      //  abIntrData[1] &= (~( RX_BIT_ACP_PACKET | RX_BIT_AAC_DONE));  // This interrupt has been processed on po
+             -lling base
+ 269   1      
+ 270   1        abIntrData[1] &= ( ~RX_BIT_ACP_PACKET );  // This interrupt has been processed on polling base
+ 271   1        siiWriteBlockHDMIRXP0( RX_HDMI_INT_GR2_ADDR, 2, abIntrData);
+ 272   1      
+ 273   1        if (( abIntrData[0] & RX_BIT_AAC_DONE) && (!(SiI_Ctrl.bIgnoreIntr & qcIgnoreAAC)) ) {
+ 274   2          siiTurnAudioOffAndSetSM_AudioOff();
+ 275   2          siiWriteByteHDMIRXP0( RX_HDMI_INT_GR2_ADDR, RX_BIT_AAC_DONE );
+ 276   2      #ifdef SII_DUMP_UART
+ 277   2          printf ( "\nAAC");
+ 278   2      #endif
+ 279   2          }
+ 280   1      
+ 281   1        if ( ( abIntrData[0] & RX_BIT_HRES_CHANGE) || ( abIntrData[0] & RX_BIT_VRES_CHANGE ) ) {
+ 282   2          // it is caused a false interrupt, by pix replication change, before unmute we well recheck
+ 283   2          // if video really wasn't changed
+ 284   2          if ( ! siiSMCheckReqVideoOn() ) {
+ 285   3            siiMuteVideoAndSetSM_SyncInChange();
+ 286   3          }
+ 287   2        }
+ 288   1      
+ 289   1        if ( abIntrData[1] & BIT_DSD_ON ) {  
+ 290   2          SiI_Ctrl.sm_bAudio = SiI_RX_AS_ReqAudio;
+ 291   2          siiChangeDSDAudioStreamHandler ();
+ 292   2        }
+ 293   1        
+ 294   1      //9135 only
+ 295   1          if (( SiI_Ctrl.bDevId == RX_SiI9135|| SiI_Ctrl.bDevId ==  RX_SiI9125 )&&( abIntrData[1] & BIT_HBRA_ON_
+             -CHANGED )){
+ 296   2          SiI_Ctrl.sm_bAudio = SiI_RX_AS_ReqAudio; 
+ 297   2          siiChangeHBRAudioStreamHandler ();    
+ 298   2          }
+ 299   1      
+ 300   1        if ( abIntrData[1] & RX_BIT_DC_ERROR ) {
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 6   
+
+ 301   2          HandleDeepColorError ();
+ 302   2        }
+ 303   1      
+ 304   1      // Handling first group interrupts
+ 305   1      
+ 306   1        siiReadBlockHDMIRXP0( RX_HDMI_INT_GR1_ADDR, 4, abIntrData); // Copy Interrupt Events into RAM
+ 307   1        abIntrData[0] &= ( ~RX_BIT_CTS_CHANGED );  // This interrupt has been processed on polling base
+ 308   1        abIntrData[1] &= ( ~( RX_BIT_GOT_AUDIO_PKT | RX_BIT_GOT_CTS_PKT) );  // This interrupt has been processed
+             - on polling base
+ 309   1      
+ 310   1        if ( SiI_Ctrl.bIgnoreIntr & qcIgnoreHDCPFail ) {
+ 311   2          if ( !(abIntrData[1] & RX_BIT_VSYNC) ) {
+ 312   3            abIntrData[3] &= ( ~RX_BIT_HDCP_FAILED ); // this interrupt shouldn't be cleared because no VSync
+ 313   3          }
+ 314   2        }
+ 315   1      
+ 316   1        siiWriteBlockHDMIRXP0( RX_HDMI_INT_GR1_ADDR, 4, abIntrData); // Clear Interrupts
+ 317   1      
+ 318   1        if ( abIntrData[1] & RX_BIT_SCDT_CHANGE ) {
+ 319   2          EnableCheckHDCPFailureWithVSyncRate( OFF );
+ 320   2          siiMuteVideoAndSetSM_SyncInChange();
+ 321   2          if ( ( SiI_Ctrl.bDevId ==  RX_SiI9021 ) || ( SiI_Ctrl.bDevId ==  RX_SiI9031 ) ) {    // SiI9031/21 canno
+             -t auto-mute when no SCDT
+ 322   3            siiTurnAudioOffAndSetSM_AudioOff();
+ 323   3            }
+ 324   2              siiSetAFEClockDelay();
+ 325   2      #ifdef SII_BUG_PHOEBE_AUTOSW_BUG
+                  if ( ( SiI_Ctrl.bDevId == RX_SiI9023 ) || ( SiI_Ctrl.bDevId == RX_SiI9033 )  ) {
+                    siiTurnAudioOffAndSetSM_AudioOff();
+                    siiSetAutoSWReset ( ON );
+                  }
+              #endif
+ 331   2        }
+ 332   1      
+ 333   1        if ( abIntrData[1] & RX_BIT_HDMI_CHANGED ) {
+ 334   2          ProcessChangeBetween_DVI_HDMI_Modes();
+ 335   2        }
+ 336   1      
+ 337   1        if ( SiI_Inf.bGlobStatus & SiI_RX_GlobalHDMI_Detected ) {
+ 338   2      //YMA use HDCP start is better
+ 339   2      //    if ( abIntrData[0] & RX_BIT_HDCP_DONE ) {
+ 340   2          if ( abIntrData[0] & RX_BIT_HDCP_START) {
+ 341   3            EnableCheckHDCPFailureWithVSyncRate( OFF );
+ 342   3          }
+ 343   2      
+ 344   2          if ( ( abIntrData[3] & RX_BIT_HDCP_FAILED ) || ( SiI_Ctrl.bIgnoreIntr & qcIgnoreHDCPFail ) ) {
+ 345   3            bError = HDCPErrorHandler ( abIntrData[3] & RX_BIT_HDCP_FAILED, abIntrData[1] & RX_BIT_VSYNC );
+ 346   3          }
+ 347   2      
+ 348   2          if ( ( abIntrData[2] & ST3_INFO_MASK) || ( abIntrData[3] & ST4_INFO_MASK) ) {
+ 349   3            if ( ( abIntrData[3] & RX_BIT_MASK_NO_AVI_INTR ) && ( SiI_Ctrl.bIgnoreIntr & qcIgnoreNoAVI ) ) {
+ 350   4              abIntrData[2] |= NoAVI_Mask;
+ 351   4            }
+ 352   3            else {
+ 353   4              abIntrData[2] &= (~NoAVI_Mask);
+ 354   4            }
+ 355   3      
+ 356   3            AVI_And_NoAVI_WorkAround( &abIntrData[2] );
+ 357   3            siiProcessInfoFrameIntrrupts( abIntrData[2] );
+ 358   3          }
+ 359   2      
+ 360   2              if ( ( abIntrData[2] & RX_BIT_NEW_CP_PACKET ) && 
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 7   
+
+ 361   2            (( SiI_Ctrl.bDevId == RX_SiI9133 )||( SiI_Ctrl.bDevId == RX_SiI9135 || SiI_Ctrl.bDevId ==  RX_SiI9125))
+             - ) {
+ 362   3            siiSetDeepColorMode ();
+ 363   3          }
+ 364   2        }
+ 365   1      
+ 366   1        return bError;
+ 367   1      }
+ 368          
+ 369          #ifdef SII_USE_RX_PIN_INTERRUPT
+              //------------------------------------------------------------------------------
+              // Function Name: siiRX_PinInterruptHandler
+              // Function Description: Checks interrupt pin, and call RX interrupt handler if
+              //                       pin is active (negative)
+              // Accepts: none
+              // Returns: none
+              // Globals: none
+              //------------------------------------------------------------------------------
+              BYTE siiRX_PinInterruptHandler( void ){
+              BYTE bError = FALSE;
+              
+                  if ( !halReadRXInt_Pin())
+                      bError = RXInterruptHandler();
+                  return bError;
+              }
+              #else
+ 386          //------------------------------------------------------------------------------
+ 387          // Function Name: CheckRXInt_Bit
+ 388          // Function Description: checks RX global interrupt bit, used when polling RX interrupts
+ 389          //------------------------------------------------------------------------------
+ 390          static BOOL CheckRXInt_Bit( void ){
+ 391   1      BOOL qResult = FALSE;
+ 392   1      
+ 393   1          if ( siiReadByteHDMIRXP0( RX_INTR_STATE_ADDR ) & RX_BIT_GLOBAL_INTR )
+ 394   1              qResult = TRUE;
+ 395   1          return qResult;
+ 396   1      }
+ 397          //------------------------------------------------------------------------------
+ 398          // Function Name: siiRX_BitInterruptHandler
+ 399          // Function Description: Checks global interrupt bit, and call RX interrupt handler if
+ 400          //                       bit is One
+ 401          // Accepts: none
+ 402          // Returns: none
+ 403          // Globals: none
+ 404          //------------------------------------------------------------------------------
+ 405          BYTE siiRX_BitInterruptHandler( void ){
+ 406   1      BYTE bError = FALSE;
+ 407   1      
+ 408   1          if( CheckRXInt_Bit() )
+ 409   1              bError = RXInterruptHandler();
+ 410   1          return bError;
+ 411   1      }
+ 412          
+ 413          #endif // end SII_USE_RX_PIN_INTERRUPT
+ 414          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    938    ----
+   CONSTANT SIZE    =     51    ----
+   XDATA SIZE       =   ----      20
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.51   SIIISR                                                                05/29/2013 17:36:12 PAGE 8   
+
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       6
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

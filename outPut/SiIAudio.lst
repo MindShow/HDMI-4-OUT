@@ -1,0 +1,966 @@
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIAUDIO
+OBJECT MODULE PLACED IN .\outPut\SiIAudio.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIAudio.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTE
+                    -XTEND PRINT(.\outPut\SiIAudio.lst) TABS(2) PREPRINT(.\outPut\SiIAudio.i) OBJECT(.\outPut\SiIAudio.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiIAudio
+   3          // ---
+   4          // Module Description: this module sirves Audio functions
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiIGlob.h"
+  15          #include "SiITrace.h"
+  16          #include "SiIAudio.h"
+  17          #include "SiITTVideo.h"
+  18          #include "SiIRXIO.h"
+  19          #include "SiIHAL.h"
+  20          #include "SiIRXDefs.h"
+  21          #include "SiIHDMIRX.h"
+  22          #include "UCfgRX.h"
+  23          #include "UGlob.h"
+  24          #include "UAudDAC.h"
+  25          
+  26          #ifdef SII_DUMP_UART
+  27          #include <stdio.h>
+  28          #endif
+  29          
+  30          AudioOutputFormatType SavedAudioOutputFormat;
+  31          //------------------------------------------------------------------------------
+  32          // Function Name: siiSetAudioOutputFormat
+  33          // Function Description:  This function used to set output audio format
+  34          //
+  35          // Accepts: pointer on AudioOutputFormatType
+  36          // Returns: none
+  37          // Globals: none
+  38          //------------------------------------------------------------------------------
+  39          void siiSetAudioOutputFormat( AudioOutputFormatType * AudioOutputFormat ){
+  40   1      BYTE bRegVal;
+  41   1      
+  42   1          bRegVal = siiReadByteHDMIRXP1 ( RX_AUDIO_CTRL_ADDR );
+  43   1          // Set or clear SPDIF Enable bit
+  44   1          if ( AudioOutputFormat->wOutputSelect & SiI_RX_AOut_SPDIF )
+  45   1              bRegVal |= RX_BIT_SPDIF_EN ;
+  46   1          else
+  47   1              bRegVal &= ( ~RX_BIT_SPDIF_EN );
+  48   1          // Set or clear Smooth Audio muting
+  49   1          if ( AudioOutputFormat->wOutputSelect & SiI_RX_AOut_SmoothHWMute )
+  50   1              bRegVal |= RX_SMOOTH_MUTE_EN;
+  51   1          else
+  52   1              bRegVal &= ( ~RX_SMOOTH_MUTE_EN ) ;
+  53   1          siiWriteByteHDMIRXP1( RX_AUDIO_CTRL_ADDR, bRegVal );
+  54   1      
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 2   
+
+  55   1          // Select SD0-3
+  56   1          bRegVal = siiReadByteHDMIRXP1 ( RX_I2S_CTRL2_ADDR );
+  57   1          bRegVal &= 0x0F;
+  58   1          bRegVal |=(( AudioOutputFormat->wOutputSelect >> 4 ) & 0xF0 );
+  59   1      
+  60   1          siiWriteByteHDMIRXP1 ( RX_I2S_CTRL2_ADDR, bRegVal );
+  61   1      
+  62   1          // set I2S bus format
+  63   1          bRegVal = AudioOutputFormat->wI2SBusFormat & 0xFF;
+  64   1          siiWriteByteHDMIRXP1( RX_I2S_CTRL1_ADDR, bRegVal );
+  65   1          bRegVal = siiReadByteHDMIRXP1( RX_I2S_CTRL2_ADDR );
+  66   1          bRegVal &= 0xFC;
+  67   1          bRegVal |= ( ( AudioOutputFormat->wI2SBusFormat >> 8 ) & 0x03 );
+  68   1          siiWriteByteHDMIRXP1( RX_I2S_CTRL2_ADDR, bRegVal );
+  69   1      
+  70   1      }
+  71          //------------------------------------------------------------------------------
+  72          // Function Name: siiGetAudioOutputFormat
+  73          // Function Description: this function used to get Output Audio Format
+  74          //
+  75          // Accepts: none
+  76          // Returns: none
+  77          // Globals: none
+  78          //------------------------------------------------------------------------------
+  79          void siiGetAudioOutputFormat( AudioOutputFormatType * AudioOutputFormat ){
+  80   1      //BYTE bRegVal;
+  81   1      
+  82   1      
+  83   1      //YMA change to return the save value instead of read from registers.
+  84   1      //the reg value may be not the right mode
+  85   1      
+  86   1        * AudioOutputFormat = SavedAudioOutputFormat;
+  87   1      
+  88   1      /*
+  89   1          AudioOutputFormat->wOutputSelect = SiI_Ctrl.wAudioOutputSelect;
+  90   1      
+  91   1          AudioOutputFormat->wI2SBusFormat = 0;
+  92   1          AudioOutputFormat->bI2SMap = 0;
+  93   1      
+  94   1          AudioOutputFormat->bI2SMap = siiReadByteHDMIRXP1( RX_I2S_MAP_ADDR );
+  95   1      
+  96   1          bRegVal = siiReadByteHDMIRXP1( RX_I2S_CTRL1_ADDR );
+  97   1          AudioOutputFormat->wI2SBusFormat = (WORD) bRegVal;
+  98   1      
+  99   1      
+ 100   1          bRegVal = siiReadByteHDMIRXP1( RX_I2S_CTRL2_ADDR );
+ 101   1          AudioOutputFormat->wOutputSelect |=( ( bRegVal & 0xF0 ) << 4 );
+ 102   1          AudioOutputFormat->wI2SBusFormat |= (WORD)( ( bRegVal & 0x03) << 8 );
+ 103   1      */
+ 104   1        //yma for API rev2
+ 105   1        //actually not need read from the registers because it may be the settings for I2S, not DSD/HBR
+ 106   1        //should return the settings by API set function or from EEPROM
+ 107   1        //otherwise, the DSD/HBR configurations will be overwritten by the I2S settings.
+ 108   1      
+ 109   1      
+ 110   1      }
+ 111          
+ 112          //------------------------------------------------------------------------------
+ 113          // Function Name: siiSetDSDHBRAudioOutputFormat
+ 114          // Function Description:  This function used to set DSD/HBR output audio format
+ 115          //
+ 116          // Accepts: none
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 3   
+
+ 117          // Returns: none
+ 118          // Globals: none
+ 119          //------------------------------------------------------------------------------
+ 120          static void siiSetDSDHBRAudioOutputFormat(BOOL qON){
+ 121   1      
+ 122   1      //AudioOutputFormatType AudioOutputFormat;
+ 123   1      
+ 124   1        if(qON){
+ 125   2          if(SiI_Inf.AudioStatus.bRepresentation == SiI_RX_AudioRepr_DSD){
+ 126   3            //YMA 2 set DSD output format as set from API
+ 127   3              if(SavedAudioOutputFormat.bDSDHBRFormat & SiI_RX_AOut_DSD_WS16Bit) 
+ 128   3                siiIIC_RX_RWBitsInByteP1(RX_I2S_CTRL1_ADDR,RX_BIT_Aout_WordSize,SET);
+ 129   3              if(SavedAudioOutputFormat.bDSDHBRFormat & SiI_RX_AOut_DSD_SENeg)
+ 130   3                siiIIC_RX_RWBitsInByteP1(RX_I2S_CTRL1_ADDR,RX_BIT_Aout_ClockEdge,SET);
+ 131   3          }
+ 132   2          
+ 133   2          else if(SiI_Inf.AudioStatus.bRepresentation == SiI_RX_AudioRepr_HBR){
+ 134   3              if(SavedAudioOutputFormat.bDSDHBRFormat & SiI_RX_AOut_HBRA_WS16Bit) 
+ 135   3                siiIIC_RX_RWBitsInByteP1(RX_I2S_CTRL1_ADDR,RX_BIT_Aout_WordSize,SET);
+ 136   3              if(SavedAudioOutputFormat.bDSDHBRFormat & SiI_RX_AOut_HBRA_SENeg)
+ 137   3                siiIIC_RX_RWBitsInByteP1(RX_I2S_CTRL1_ADDR,RX_BIT_Aout_ClockEdge,SET);
+ 138   3        
+ 139   3          }
+ 140   2          
+ 141   2        }
+ 142   1      
+ 143   1        else{//YMA restore SiI_RX_AudioRepr_PCM; 
+ 144   2          //not get the parameter from 
+ 145   2      //    siiGetAudioOutputFormat( &AudioOutputFormat );
+ 146   2          siiSetAudioOutputFormat( &SavedAudioOutputFormat ); 
+ 147   2        }
+ 148   1      }
+ 149          // Function Name: ChangeDSDAudioStreamHandler
+ 150          // Function Description:
+ 151          //
+ 152          // Accepts: none
+ 153          // Returns: none
+ 154          // Globals: none
+ 155          //------------------------------------------------------------------------------
+ 156          void siiChangeDSDAudioStreamHandler (  void ){
+ 157   1      //BYTE bNewAudioRepresentation;
+ 158   1      
+ 159   1          if ( siiReadByteHDMIRXP1 ( RX_AUDP_STAT_ADDR) & BIT_DSD_STATUS ){
+ 160   2              SiI_Inf.AudioStatus.bRepresentation = SiI_RX_AudioRepr_DSD;
+ 161   2        //YMA DSD MCLK is bit 3,2 of the parameter
+ 162   2          siiSetMasterClock((SiI_Ctrl.bRXInitPrm0 >> 2) & SelectMClock); 
+ 163   2          siiSetDSDHBRAudioOutputFormat(ON);
+ 164   2          }
+ 165   1        else{
+ 166   2              SiI_Inf.AudioStatus.bRepresentation = SiI_RX_AudioRepr_PCM;
+ 167   2          siiSetMasterClock(SiI_Ctrl.bRXInitPrm0  & SelectMClock); 
+ 168   2          siiSetDSDHBRAudioOutputFormat(OFF);
+ 169   2        }
+ 170   1      
+ 171   1      
+ 172   1      }
+ 173          
+ 174          //------------------------------------------------------------------------------
+ 175          // Function Name: ChangeHBRAudioStreamHandler
+ 176          // Function Description:
+ 177          //
+ 178          // Accepts: none
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 4   
+
+ 179          // Returns: none
+ 180          // Globals: none
+ 181          //------------------------------------------------------------------------------
+ 182          void siiChangeHBRAudioStreamHandler (  void ){
+ 183   1      
+ 184   1        if (siiReadByteHDMIRXP1 ( RX_AUDP_STAT_ADDR) & RX_BIT_HBRA_STATUS )
+ 185   1        {
+ 186   2          siiSetHBRFs (ON);   
+ 187   2              SiI_Inf.AudioStatus.bRepresentation = SiI_RX_AudioRepr_HBR;   
+ 188   2        //YMA HBR  MCLK is bit 5,4 of the parameter
+ 189   2      
+ 190   2          siiSetMasterClock((SiI_Ctrl.bRXInitPrm0 >> 4) & SelectMClock); 
+ 191   2          siiSetDSDHBRAudioOutputFormat(ON);
+ 192   2      
+ 193   2          }
+ 194   1        else{     
+ 195   2          siiSetHBRFs (OFF);
+ 196   2              SiI_Inf.AudioStatus.bRepresentation = SiI_RX_AudioRepr_PCM;
+ 197   2          siiSetMasterClock(SiI_Ctrl.bRXInitPrm0  & SelectMClock); 
+ 198   2          siiSetDSDHBRAudioOutputFormat(OFF);
+ 199   2        }
+ 200   1      
+ 201   1      }
+ 202          
+ 203          //-----------------------------------------------------------------------------
+ 204          // This table represents operational CTS ranges
+ 205          // To get Real CTS Value, * 10, it was done to reduce data size
+ 206          //-----------------------------------------------------------------------------
+ 207          ROM const CTSLimitsType CTSLimits[4] = {
+ 208              {1666, 16666},   // FPix TMDS range 25-50mHz
+ 209              {3333, 28666},   // FPix TMDS range 50-86mHz
+ 210              {5733, 41666},   // FPix TMDS range 86-125mHz
+ 211              {8333, 55000},   // FPix TMDS range 125-165mHz
+ 212          };
+ 213          //------------------------------------------------------------------------------
+ 214          // Function Name: siiClearCTSChangeInterruprt
+ 215          // Function Description:   This functio clears CTS change interrupts in order
+ 216          //                         to use later information about stability of CTS values
+ 217          // Accepts: none
+ 218          // Returns: none
+ 219          // Globals: none
+ 220          //------------------------------------------------------------------------------
+ 221          void siiClearCTSChangeInterruprt( void ){
+ 222   1            siiWriteByteHDMIRXP0( RX_HDMI_INT_ST1_ADDR, RX_BIT_CTS_CHANGED );
+ 223   1      }
+ 224          
+ 225          //------------------------------------------------------------------------------
+ 226          // Function Name: CheckCTSChanged
+ 227          // Function Description:  it used to detect if CTS value has been changed
+ 228          //------------------------------------------------------------------------------
+ 229          static BOOL CheckCTSChanged( void ){
+ 230   1      BOOL qResult = FALSE;
+ 231   1      
+ 232   1          if ( siiReadByteHDMIRXP0( RX_HDMI_INT_ST1_ADDR ) & RX_BIT_CTS_CHANGED )
+ 233   1              qResult = TRUE;
+ 234   1          return  qResult;
+ 235   1      }
+ 236          //------------------------------------------------------------------------------
+ 237          // Function Name: AudioFIFO_Reset
+ 238          // Function Description: Makes Audio FIFO reset
+ 239          //------------------------------------------------------------------------------
+ 240          void siiAudioFIFO_Reset( void ){
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 5   
+
+ 241   1      
+ 242   1          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, RX_BIT_AUDIO_FIFO_RESET, SET );
+ 243   1          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, RX_BIT_AUDIO_FIFO_RESET, CLR );
+ 244   1      
+ 245   1      }
+ 246          //------------------------------------------------------------------------------
+ 247          // Function Name: ACR_Reset
+ 248          // Function Description: Makes Audio clock regeneration (ACR) reset
+ 249          //------------------------------------------------------------------------------
+ 250          static void ACR_Reset( void ){
+ 251   1      
+ 252   1          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, RX_BIT_ACR_RESET, SET );
+ 253   1          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, RX_BIT_ACR_RESET, CLR );
+ 254   1      }
+ 255          //------------------------------------------------------------------------------
+ 256          // Function Name: siiAudioMute
+ 257          // Function Description:  mutes audio
+ 258          //
+ 259          // Accepts: qOn
+ 260          // Returns: none
+ 261          // Globals: none
+ 262          //------------------------------------------------------------------------------
+ 263          void siiAudioMute( BOOL qOn ){
+ 264   1      
+ 265   1          if ( qOn ) {
+ 266   2              siiIIC_RX_RWBitsInByteP1( RX_AUDP_MUTE_ADDR, RX_BIT_AUDIO_MUTE, SET );
+ 267   2              SiI_Inf.bGlobStatus |= SiI_RX_GlobalHDMI_AMute;
+ 268   2          }
+ 269   1          else {
+ 270   2              siiIIC_RX_RWBitsInByteP1( RX_AUDP_MUTE_ADDR, RX_BIT_AUDIO_MUTE, CLR );
+ 271   2              SiI_Inf.bGlobStatus &= (~SiI_RX_GlobalHDMI_AMute);
+ 272   2          }
+ 273   1      }
+ 274          #ifdef SII_ANALOG_DIG_AUDIO_MAX
+ 275          //------------------------------------------------------------------------------
+ 276          // Function Name: siiSetAnalogAudioMux
+ 277          // Function Description:  Used in DVI mode for Analog Audio input selection
+ 278          //                        control of MUX through MCU general purpose output pins
+ 279          // Accepts: bChannel
+ 280          // Returns: none
+ 281          // Globals: none
+ 282          //------------------------------------------------------------------------------
+ 283          
+ 284          void siiSetAnalogAudioMux( BYTE bChannel ){
+ 285   1      BYTE bPCB_Id;
+ 286   1      
+ 287   1         bPCB_Id = siiGetPCB_Id();
+ 288   1      
+ 289   1         if( bChannel == SiI_RX_VInCh1 ) {   // select MuxAnalog Channel A
+ 290   2      //
+ 291   2      //YMA 10/4/06 remove wilma special
+ 292   2      //   if (( bPCB_Id == SiI_CP9133 )||( bPCB_Id == SiI_CP9135 )) {
+ 293   2      
+ 294   2        if (bPCB_Id == SiI_CP9133 ){
+ 295   3                halAudioSetAltA();
+ 296   3               halAudioClearAltB();
+ 297   3            }
+ 298   2            else {
+ 299   3               halAudioSetA();
+ 300   3               halAudioClearB();
+ 301   3            }
+ 302   2         }
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 6   
+
+ 303   1         else if ( bChannel == SiI_RX_VInCh2 ) {  // select MuxAnalog Channel B
+ 304   2      //YMA 10/4/06 remove wilma special
+ 305   2      //   if (( bPCB_Id == SiI_CP9133 )||( bPCB_Id == SiI_CP9135 )) {
+ 306   2      
+ 307   2        if (bPCB_Id == SiI_CP9133 ){
+ 308   3                halAudioClearAltA();
+ 309   3               halAudioSetAltB();
+ 310   3            }
+ 311   2            else {
+ 312   3               halAudioClearA();
+ 313   3               halAudioSetB();
+ 314   3            }
+ 315   2         }
+ 316   1      }
+ 317          //------------------------------------------------------------------------------
+ 318          // Function Name: siiSetDigitalAudioMux(
+ 319          // Function Description:  Used in HDMI mode for Didital Audio input selection
+ 320          //
+ 321          // Accepts: none
+ 322          // Returns: none
+ 323          // Globals: none
+ 324          //------------------------------------------------------------------------------
+ 325          
+ 326          void siiSetDigitalAudioMux( void ){
+ 327   1      BYTE bPCB_Id;
+ 328   1      
+ 329   1         bPCB_Id = siiGetPCB_Id();
+ 330   1      //YMA 10/4/06 remove wilma special
+ 331   1      //   if (( bPCB_Id == SiI_CP9133 )||( bPCB_Id == SiI_CP9135 )) {
+ 332   1      
+ 333   1        if (bPCB_Id == SiI_CP9133 ){
+ 334   2            halAudioClearAltA();
+ 335   2            halAudioClearAltB();
+ 336   2         }
+ 337   1         else {
+ 338   2            halAudioClearA();
+ 339   2            halAudioClearB();
+ 340   2         }
+ 341   1      
+ 342   1      }
+ 343          #endif // end SII_ANALOG_DIG_AUDIO_MAX
+ 344          //------------------------------------------------------------------------------
+ 345          // Function Name: AudioExceptionsControl
+ 346          // Function Description: for switching between Automatic and Manual Audio control
+ 347          //------------------------------------------------------------------------------
+ 348          static void AudioExceptionsControl(BOOL qOn){
+ 349   1      
+ 350   1          if ( qOn ) {
+ 351   2              siiIIC_RX_RWBitsInByteP0( RX_AEC_CTRL_ADDR, RX_BIT_AEC_EN, SET );
+ 352   2              siiIIC_RX_RWBitsInByteP0( RX_INT_MASK_ST5_ADDR,  RX_BIT_AAC_DONE, SET );
+ 353   2              SiI_Ctrl.bIgnoreIntr &= (~qcIgnoreAAC);
+ 354   2          }
+ 355   1          else {
+ 356   2              siiIIC_RX_RWBitsInByteP0( RX_AEC_CTRL_ADDR, RX_BIT_AEC_EN, CLR );
+ 357   2              siiIIC_RX_RWBitsInByteP0( RX_INT_MASK_ST5_ADDR,  RX_BIT_AAC_DONE, CLR );
+ 358   2              SiI_Ctrl.bIgnoreIntr |= qcIgnoreAAC;
+ 359   2      
+ 360   2          }
+ 361   1      }
+ 362          //------------------------------------------------------------------------------
+ 363          // Function Name: ACRInit
+ 364          // Function Description: This function makes initialisation of Audio Clock Regeneration (ACR)
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 7   
+
+ 365          //------------------------------------------------------------------------------
+ 366          static void ACRInit( void ){
+ 367   1      
+ 368   1          siiIIC_RX_RWBitsInByteP1( RX_ACR_CTRL1_ADDR, RX_BIT_ACR_INIT, SET );
+ 369   1      
+ 370   1      }
+ 371          //------------------------------------------------------------------------------
+ 372          // Function Name: ClearFIFOOverUnderRunInterrupts
+ 373          // Function Description: clears the interrupts, which indicate FIFO operation
+ 374          //------------------------------------------------------------------------------
+ 375          static void ClearFIFOOverUnderRunInterrupts( void ){
+ 376   1      
+ 377   1            siiWriteByteHDMIRXP0( RX_HDMI_INT_ST4_ADDR, RX_BIT_FIFO_UNDERRUN | RX_BIT_FIFO_OVERRUN );
+ 378   1      }
+ 379          //------------------------------------------------------------------------------
+ 380          // Function Name: CheckFIFOOverUnderRunInterrupts
+ 381          // Function Description: used to detect the interrupt, getting of these interrupt,
+ 382          //                       tells that FIFO has problems
+ 383          //------------------------------------------------------------------------------
+ 384          static BOOL CheckFIFOOverUnderRunInterrupts( void ){
+ 385   1      BOOL qResult = FALSE;
+ 386   1      
+ 387   1          if ( siiReadByteHDMIRXP0( RX_HDMI_INT_ST4_ADDR) & ( RX_BIT_FIFO_UNDERRUN | RX_BIT_FIFO_OVERRUN ) )
+ 388   1              qResult = TRUE;
+ 389   1          return  qResult;
+ 390   1      }
+ 391          
+ 392          //------------------------------------------------------------------------------
+ 393          // Function Name: CheckGotAudioPacketInterrupt
+ 394          // Function Description: indicates presence of Audio Packets
+ 395          //------------------------------------------------------------------------------
+ 396          static BOOL CheckGotAudioPacketInterrupt( void ){
+ 397   1      BOOL qResult = FALSE;
+ 398   1      
+ 399   1          if (siiReadByteHDMIRXP0( RX_HDMI_INT_ST2_ADDR) & RX_BIT_GOT_AUDIO_PKT )
+ 400   1              qResult = TRUE;
+ 401   1          return  qResult;
+ 402   1      }
+ 403          
+ 404          //------------------------------------------------------------------------------
+ 405          // Function Name: CheckGotCTSPacketInterrupt
+ 406          // Function Description:  indicates presence of CTS Packets, these packets used for
+ 407          //                        Audio Clock Regeneration
+ 408          //------------------------------------------------------------------------------
+ 409          static BOOL CheckGotCTSPacketInterrupt( void ){
+ 410   1      BOOL qResult = FALSE;
+ 411   1      
+ 412   1          if (siiReadByteHDMIRXP0( RX_HDMI_INT_ST2_ADDR) & RX_BIT_GOT_CTS_PKT )
+ 413   1              qResult = TRUE;
+ 414   1          return  qResult;
+ 415   1      }
+ 416          //------------------------------------------------------------------------------
+ 417          // Function Name: siiClearGotCTSAudioPacketsIterrupts
+ 418          // Function Description:  clears CTS and Audio packets interrupts
+ 419          //                        system checks later if packets are received
+ 420          // Accepts: none
+ 421          // Returns: none
+ 422          // Globals: none
+ 423          //------------------------------------------------------------------------------
+ 424          void siiClearGotCTSAudioPacketsIterrupts ( void ) {
+ 425   1          siiWriteByteHDMIRXP0( RX_HDMI_INT_ST2_ADDR, ( RX_BIT_GOT_AUDIO_PKT | RX_BIT_GOT_CTS_PKT) );
+ 426   1      }
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 8   
+
+ 427          
+ 428          //------------------------------------------------------------------------------
+ 429          // Function Name: GotCTSPackets
+ 430          // Function Description: received CTS packets, used for Audio Clock Regeneration
+ 431          //------------------------------------------------------------------------------
+ 432          static BOOL GotCTSPackets( void ){
+ 433   1      
+ 434   1          return CheckGotCTSPacketInterrupt();
+ 435   1      }
+ 436          //------------------------------------------------------------------------------
+ 437          // Function Name: GotAudioPackets
+ 438          // Function Description: received Audio packets
+ 439          //------------------------------------------------------------------------------
+ 440          static BOOL GotAudioPackets( void ){
+ 441   1      
+ 442   1          return CheckGotAudioPacketInterrupt();
+ 443   1      }
+ 444          //------------------------------------------------------------------------------
+ 445          // Function Name: GetCTS
+ 446          // Function Description: This function gets Cycle Timing Stamp (CTS)
+ 447          //                       the result is divided by 10 to simlify math
+ 448          //------------------------------------------------------------------------------
+ 449          static WORD GetCTS( void ){
+ 450   1      WORD CTS_L;
+ 451   1      DWORD CTS_H;
+ 452   1      
+ 453   1        CTS_L = siiReadWordHDMIRXP1( RX_HW_CTS_ADDR );
+ 454   1        CTS_H = siiReadWordHDMIRXP1( RX_HW_CTS_ADDR + 2 );
+ 455   1        CTS_H <<= 16;
+ 456   1        return (WORD)((CTS_H | CTS_L )/10 );
+ 457   1      
+ 458   1      }
+ 459          //------------------------------------------------------------------------------
+ 460          // Function Name: IsCTSInRange
+ 461          // Function Description: Check if CTS stamp in the operation range
+ 462          //------------------------------------------------------------------------------
+ 463          static BOOL IsCTSInRange( void ){
+ 464   1      BYTE bPixClk;
+ 465   1      WORD wCTS;
+ 466   1      BOOL qResult = FALSE;
+ 467   1      
+ 468   1          wCTS = GetCTS();
+ 469   1          bPixClk = siiGetPixClock();
+ 470   1          if ( bPixClk ) {
+ 471   2              if ( bPixClk < 50 ) {
+ 472   3                  if ( ( CTSLimits[0].Min < wCTS ) && ( CTSLimits[0].Max > wCTS ) )
+ 473   3                      qResult = TRUE;
+ 474   3              }
+ 475   2              else if ( bPixClk  < 86 ) {
+ 476   3                  if( ( CTSLimits[1].Min < wCTS ) && ( CTSLimits[1].Max > wCTS ) )
+ 477   3                      qResult = TRUE;
+ 478   3              }
+ 479   2              else if ( bPixClk < 125 ) {
+ 480   3                  if( ( CTSLimits[2].Min < wCTS ) && ( CTSLimits[2].Max > wCTS ) )
+ 481   3                      qResult = TRUE;
+ 482   3              }
+ 483   2              else if ( bPixClk < 165 ) {
+ 484   3                  if( ( CTSLimits[3].Min < wCTS ) && ( CTSLimits[3].Max > wCTS ) )
+ 485   3                      qResult = TRUE;
+ 486   3              }
+ 487   2          }
+ 488   1          else { // This check goes when video resolution is not detected yet,
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 9   
+
+ 489   2                 // so less strict conditions for test.
+ 490   2                  if ( ( CTSLimits[0].Min < wCTS ) && ( CTSLimits[3].Max > wCTS ) )
+ 491   2                      qResult = TRUE;
+ 492   2          }
+ 493   1          return qResult;
+ 494   1      }
+ 495          //------------------------------------------------------------------------------
+ 496          // Function Name: ClearCTS_DroppedReusedInterrupts
+ 497          // Function Description: clears CTS dropped or reused interrupts
+ 498          //                       these interrupts used to check stability of receiving CTS
+ 499          //                       packets
+ 500          //------------------------------------------------------------------------------
+ 501          static void ClearCTS_DroppedReusedInterrupts( void ){
+ 502   1          siiWriteByteHDMIRXP0( RX_HDMI_INT_ST4_ADDR , RX_BIT_CTS_DROPPED | RX_BIT_CTS_REUSED );
+ 503   1      }
+ 504          //------------------------------------------------------------------------------
+ 505          // Function Name: GotCTS_DroppedReusedInterrupts
+ 506          // Function Description: check presence of CTS dropped or reused interrupts
+ 507          //------------------------------------------------------------------------------
+ 508          static BOOL GotCTS_DroppedReusedInterrupts( void ){
+ 509   1      BOOL qResult = FALSE;
+ 510   1      
+ 511   1          if ( siiReadByteHDMIRXP0( RX_HDMI_INT_ST4_ADDR ) & ( RX_BIT_CTS_DROPPED | RX_BIT_CTS_REUSED ))
+ 512   1              qResult = TRUE;
+ 513   1          return qResult;
+ 514   1      }
+ 515          //------------------------------------------------------------------------------
+ 516          // Function Name: IsAudioStable()
+ 517          // Function Description:  About stable audio clock we judge how stable CTS packets are coming
+ 518          //                        If CTS dropped, then CTS packets coming too often
+ 519          //                        If CTS reused, then CTS packets coming too seldom
+ 520          //------------------------------------------------------------------------------
+ 521          static BOOL GotAudioStable( void ){
+ 522   1      BOOL qResult = FALSE;
+ 523   1      
+ 524   1          if ( !GotCTS_DroppedReusedInterrupts() )
+ 525   1              qResult = TRUE;
+ 526   1          return qResult;
+ 527   1      
+ 528   1      }
+ 529          //------------------------------------------------------------------------------
+ 530          // Function Name: GotPLL_UnlockInterrupt
+ 531          // Function Description: this function is used if PLL is unlock
+ 532          //------------------------------------------------------------------------------
+ 533          static BOOL GotPLL_UnlockInterrupt( void ){
+ 534   1      BOOL qResult = FALSE;
+ 535   1      
+ 536   1          if ( siiReadByteHDMIRXP0( RX_HDMI_INT_ST1_ADDR) & RX_BIT_ACR_PLL_UNLOCK )
+ 537   1              qResult = TRUE;
+ 538   1          return qResult;
+ 539   1      }
+ 540          
+ 541          //------------------------------------------------------------------------------
+ 542          // Function Name:  ClearPLL_UnlockInterrupt
+ 543          // Function Description: clears PLL unlock interrupt
+ 544          //------------------------------------------------------------------------------
+ 545          static void ClearPLL_UnlockInterrupt( void ){
+ 546   1      
+ 547   1          siiWriteByteHDMIRXP0( RX_HDMI_INT_ST1_ADDR, RX_BIT_ACR_PLL_UNLOCK );
+ 548   1      }
+ 549          //------------------------------------------------------------------------------
+ 550          // Function Name: GotPLL_Unlocked
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 10  
+
+ 551          // Function Description: Check if Audio PLL is still unlock. Function clears PLL unlock
+ 552          //                       interrupt and checks for new interrupt
+ 553          //------------------------------------------------------------------------------
+ 554          static BOOL GotPLL_Unlocked( void ){
+ 555   1      BOOL qResult = FALSE;
+ 556   1      
+ 557   1          ClearPLL_UnlockInterrupt();
+ 558   1          if ( GotPLL_UnlockInterrupt() )
+ 559   1              qResult = TRUE;
+ 560   1          return qResult;
+ 561   1      }
+ 562          
+ 563          #ifdef SII_DUMP_UART
+ 564          //------------------------------------------------------------------------------
+ 565          // Function Name:  PrintN
+ 566          // Function Description:
+ 567          //
+ 568          //------------------------------------------------------------------------------
+ 569          static void PrintN ( void ) {
+ 570   1      WORD wN_L;
+ 571   1      DWORD dwN_H;
+ 572   1      
+ 573   1          wN_L = siiReadWordHDMIRXP1( RX_HW_N_ADDR );
+ 574   1          dwN_H = siiReadWordHDMIRXP1( RX_HW_N_ADDR + 2 );
+ 575   1          dwN_H <<= 16;
+ 576   1          dwN_H |= wN_L;
+ 577   1          printf(" N = %d ", (int) dwN_H );
+ 578   1      
+ 579   1      }
+ 580          //------------------------------------------------------------------------------
+ 581          // Function Name:  PrintCTS
+ 582          // Function Description:
+ 583          //
+ 584          //------------------------------------------------------------------------------
+ 585          static void PrintCTS ( void ) {
+ 586   1      WORD CTS_L;
+ 587   1      DWORD CTS_H;
+ 588   1      
+ 589   1          CTS_L = siiReadWordHDMIRXP1( RX_HW_CTS_ADDR );
+ 590   1          CTS_H = siiReadWordHDMIRXP1( RX_HW_CTS_ADDR + 2 );
+ 591   1       
+ 592   1      //    CTS_H <<= 16;
+ 593   1      //    CTS_H |= CTS_L;
+ 594   1      //    printf(" CTS = % ", (int) CTS_H );  //fixed in build 010118. 
+ 595   1          printf(" CTS = 0x%x%x \n",(int)CTS_H,(int)CTS_L );
+ 596   1      
+ 597   1      }
+ 598          //------------------------------------------------------------------------------
+ 599          // Function Name: PrintFIFO_Diff()
+ 600          // Function Description:
+ 601          //
+ 602          //------------------------------------------------------------------------------
+ 603          static void PrintFIFO_Diff ( void ) {
+ 604   1      BYTE bRegVal;
+ 605   1      
+ 606   1          bRegVal = GetFIFO_DiffPointer();
+ 607   1          printf(" FIFO diff = 0x%X ", (int) bRegVal );
+ 608   1      
+ 609   1      }
+ 610          
+ 611          #endif
+ 612          //------------------------------------------------------------------------------
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 11  
+
+ 613          // Function Name: ResetFIFO_AndCheckItsOperation
+ 614          // Function Description: If no FIFO under run or over run interrupts after Audio FIFO restet,
+ 615          //                       then FIFO is working fine
+ 616          //------------------------------------------------------------------------------
+ 617          BYTE ResetFIFO_AndCheckItsOperation( void ){
+ 618   1      BYTE bError = FALSE;
+ 619   1      BOOL qFIFO_OverUnderRun = TRUE;
+ 620   1      BYTE bTry = 3;
+ 621   1      BYTE bFIFO_DiffPointer;
+ 622   1      
+ 623   1      
+ 624   1          if ( ( SiI_Ctrl.bDevId ==  RX_SiI9021 ) || ( SiI_Ctrl.bDevId ==  RX_SiI9031 ) ){
+ 625   2      
+ 626   2              do { // !!!!!!!!! wait when FIFO UnderRun and OverRun are gone
+ 627   3      
+ 628   3                  siiAudioFIFO_Reset();
+ 629   3                  ClearFIFOOverUnderRunInterrupts();
+ 630   3                  halDelayMS(1);
+ 631   3                  qFIFO_OverUnderRun = CheckFIFOOverUnderRunInterrupts();
+ 632   3                  if ( qFIFO_OverUnderRun )
+ 633   3                      break;
+ 634   3      
+ 635   3              } while ( --bTry );
+ 636   2          }
+ 637   1          else {
+ 638   2              siiAudioFIFO_Reset();
+ 639   2              ClearFIFOOverUnderRunInterrupts();
+ 640   2      
+ 641   2              halDelayMS( 1 );
+ 642   2      
+ 643   2              qFIFO_OverUnderRun = CheckFIFOOverUnderRunInterrupts();
+ 644   2      
+ 645   2          }
+ 646   1          if ( qFIFO_OverUnderRun ) {
+ 647   2              bFIFO_DiffPointer = GetFIFO_DiffPointer();
+ 648   2      //YMA change for Rx FIFO size 32
+ 649   2      //        if (( bFIFO_DiffPointer < 2) || (bFIFO_DiffPointer > 16 ) )
+ 650   2              if (( bFIFO_DiffPointer < 2) || (bFIFO_DiffPointer > 0x19 ) )
+ 651   2                  bError = SiI_EC_FIFO_ResetFailure;
+ 652   2              else
+ 653   2                  bError = SiI_EC_FIFO_UnderRunStuck;
+ 654   2          }
+ 655   1      #ifdef SII_DUMP_UART
+ 656   1          PrintFIFO_Diff ();
+ 657   1          PrintN();
+ 658   1          PrintCTS();
+ 659   1      #endif
+ 660   1          return bError;
+ 661   1      }
+ 662          //------------------------------------------------------------------------------
+ 663          // Function Name: SetAudioClock
+ 664          // Function Description: Makes Master Clock Enable
+ 665          //------------------------------------------------------------------------------
+ 666          static void SetAudioClock ( void ){
+ 667   1          siiIIC_RX_RWBitsInByteP1( RX_I2S_CTRL2_ADDR, RX_BIT_MCLK_EN, SET );
+ 668   1      }
+ 669          //------------------------------------------------------------------------------
+ 670          // Function Name: ClearAudioClock
+ 671          // Function Description: Makes Master Clock Disable
+ 672          //------------------------------------------------------------------------------
+ 673          static void ClearAudioClock ( void ){
+ 674   1          siiIIC_RX_RWBitsInByteP1( RX_I2S_CTRL2_ADDR, RX_BIT_MCLK_EN, CLR );
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 12  
+
+ 675   1      }
+ 676          //------------------------------------------------------------------------------
+ 677          // Function Name: MaskUnusedAudioOutputs
+ 678          // Function Description: disable unused channels in order to prevent audio noise
+ 679          //------------------------------------------------------------------------------
+ 680          static void MaskUnusedAudioOutputs( BYTE * pbRegister ){
+ 681   1      BYTE bMask;
+ 682   1      
+ 683   1          if (( siiReadByteHDMIRXP1( RX_AUDP_STAT_ADDR ) & RX_BIT_LAYOUT_1 )
+ 684   1      //YMA 2 HBR mode may get layout 0, but needs to enable all SDx
+ 685   1          ||(SiI_Inf.AudioStatus.bRepresentation == SiI_RX_AudioRepr_HBR))
+ 686   1              bMask = 0xFF;
+ 687   1          else
+ 688   1              bMask = 0x1F;
+ 689   1          * pbRegister &=  bMask;
+ 690   1      
+ 691   1      }
+ 692          
+ 693          //------------------------------------------------------------------------------
+ 694          // Function Name: PrepareAACOn
+ 695          // Function Description: prepare Automatic Audio Control On
+ 696          //------------------------------------------------------------------------------
+ 697          static void PrepareAACOn( void ){
+ 698   1      BYTE bRegVal;
+ 699   1      
+ 700   1          bRegVal = siiReadByteHDMIRXP1( RX_I2S_CTRL2_ADDR );
+ 701   1          bRegVal |= (BYTE) ((SiI_Ctrl.wAudioOutputSelect >> 4 ) & 0xF3);
+ 702   1          MaskUnusedAudioOutputs( &bRegVal );
+ 703   1          siiWriteByteHDMIRXP1( RX_I2S_CTRL2_ADDR, bRegVal );  // Enable SDX (Reg (p1)27)
+ 704   1      
+ 705   1          bRegVal = siiReadByteHDMIRXP1( RX_AUDIO_CTRL_ADDR );     // Enable SCK, WS, SPDIF, ignor VUCP errors (
+             -p1)2
+ 706   1          if ( SiI_Ctrl.wAudioOutputSelect & SiI_RX_AOut_SPDIF )
+ 707   1              bRegVal |= RX_BIT_SPDIF_EN ;
+ 708   1          else
+ 709   1              bRegVal &= ( ~RX_BIT_SPDIF_EN );
+ 710   1          if ( SiI_Ctrl.wAudioOutputSelect & SiI_RX_AOut_I2S )
+ 711   1              bRegVal |= RX_BIT_I2S_MODE ;
+ 712   1          else
+ 713   1              bRegVal &= ( ~RX_BIT_I2S_MODE );
+ 714   1          if ( SiI_Ctrl.wAudioOutputSelect & SiI_RX_AOut_SmoothHWMute )
+ 715   1              bRegVal |= RX_SMOOTH_MUTE_EN;
+ 716   1          else
+ 717   1              bRegVal &= ( ~RX_SMOOTH_MUTE_EN );
+ 718   1          bRegVal |= RX_BIT_PASS_SPDIF_ERR;
+ 719   1          siiWriteByteHDMIRXP1( RX_AUDIO_CTRL_ADDR, bRegVal );
+ 720   1      }
+ 721          //------------------------------------------------------------------------------
+ 722          // Function Name: IsAudioReady
+ 723          // Function Description: check for Audio Error conditions
+ 724          //------------------------------------------------------------------------------
+ 725          static BOOL IsAudioReady( void ){
+ 726   1      BOOL qResult = FALSE;
+ 727   1      
+ 728   1          ClearCTS_DroppedReusedInterrupts();
+ 729   1      
+ 730   1          if ( !GotAudioPackets())
+ 731   1              SiI_Inf.bAudioErr = SiI_EC_NoAudioPackets;
+ 732   1          else if ( !GotCTSPackets() )
+ 733   1              SiI_Inf.bAudioErr = SiI_EC_NoCTS_Packets;
+ 734   1          else if ( !IsCTSInRange() )
+ 735   1              SiI_Inf.bAudioErr = SiI_EC_CTS_OutOfRange;
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 13  
+
+ 736   1          else if ( !GotAudioStable() )
+ 737   1              SiI_Inf.bAudioErr = SiI_WC_CTS_Irregular;
+ 738   1          else {
+ 739   2              SiI_Inf.bAudioErr = SiI_EC_NoAudioErrors;
+ 740   2              qResult = TRUE;
+ 741   2          }
+ 742   1          return qResult;
+ 743   1      }
+ 744          //------------------------------------------------------------------------------
+ 745          // Function Name:  siiCheckAudio_IfOK_InitACR
+ 746          // Function Description: Checks Audio Ready and makes ACR Reaset and Initilization
+ 747          //
+ 748          // Accepts: none
+ 749          // Returns: none
+ 750          // Globals: none
+ 751          //------------------------------------------------------------------------------
+ 752          BOOL siiCheckAudio_IfOK_InitACR( void ){
+ 753   1      BOOL qResult = FALSE;
+ 754   1      
+ 755   1          siiClearBCHCounter();
+ 756   1      
+ 757   1          if ( IsAudioReady() ){
+ 758   2              qResult = TRUE;
+ 759   2          }
+ 760   1        ACR_Reset();
+ 761   1          ACRInit();
+ 762   1      
+ 763   1          return qResult;
+ 764   1      }
+ 765          //------------------------------------------------------------------------------
+ 766          // Function Name: CheckPLLUnLockAndReCheckAudio
+ 767          // Function Description: checks audio PLL state, and another audio conditions
+ 768          //------------------------------------------------------------------------------
+ 769          BOOL CheckPLLUnLockAndReCheckAudio( void ){
+ 770   1      BOOL qResult = FALSE;
+ 771   1      
+ 772   1          if( GotPLL_Unlocked() )
+ 773   1              SiI_Inf.bAudioErr = SiI_EC_PLL_Unlock;
+ 774   1          else if ( IsAudioReady() ){
+ 775   2              qResult = TRUE;
+ 776   2          }
+ 777   1          return qResult;
+ 778   1      }
+ 779          //------------------------------------------------------------------------------
+ 780          // Function Name: SaveInputAudioStatus
+ 781          // Function Description:  saving input Audio stream info into SiI_Inf.AudioStatus
+ 782          // VG this function will be modified for DSD and other new audio streams
+ 783          //------------------------------------------------------------------------------
+ 784          void siiSaveInputAudioStatus( void ){
+ 785   1      
+ 786   1          SiI_Inf.AudioStatus.bRepresentation =  SiI_Inf.AudioStatus.bAccuracyAndFs = SiI_Inf.AudioStatus.bLengt
+             -h = 0;
+ 787   1          SiI_Inf.AudioStatus.bNumberChannels = 0;
+ 788   1      // get audio sample representation
+ 789   1          if ( siiReadByteHDMIRXP1( RX_CH_STATUS1_ADDR ) & RX_BIT_AUDIO_SAMPLE_NPCM )
+ 790   1              SiI_Inf.AudioStatus.bRepresentation = SiI_RX_AudioRepr_Compressed;
+ 791   1          else
+ 792   1              SiI_Inf.AudioStatus.bRepresentation = SiI_RX_AudioRepr_PCM;
+ 793   1          if ( (SiI_Ctrl.bDevId ==  RX_SiI9033 || SiI_Ctrl.bDevId ==  RX_SiI9133 
+ 794   1          || SiI_Ctrl.bDevId ==  RX_SiI9135|| SiI_Ctrl.bDevId ==  RX_SiI9125)
+ 795   1               && ( siiReadByteHDMIRXP1( RX_AUDP_STAT_ADDR ) & RX_BIT_DSD_STATUS ) ) {
+ 796   2              SiI_Inf.AudioStatus.bRepresentation = SiI_RX_AudioRepr_DSD;
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 14  
+
+ 797   2          }
+ 798   1      
+ 799   1      // get Fs/Length
+ 800   1          if( ( SiI_Inf.AudioStatus.bRepresentation == SiI_RX_AudioRepr_PCM )
+ 801   1              || ( SiI_Inf.AudioStatus.bRepresentation == SiI_RX_AudioRepr_Compressed )) {
+ 802   2      
+ 803   2               SiI_Inf.AudioStatus.bAccuracyAndFs |= siiReadByteHDMIRXP1( RX_CH_STATUS4_ADDR );
+ 804   2               SiI_Inf.AudioStatus.bLength =  ( siiReadByteHDMIRXP1( RX_CH_STATUS5_ADDR ) & 0x0F );
+ 805   2          }
+ 806   1      
+ 807   1      
+ 808   1      
+ 809   1          if ( SiI_Inf.AudioStatus.bNumberChannels == SiI_RX_NumAudCh_Unknown ){ // bNumberChannels is copied fr
+             -om Audio InfoFrame if it's not Zero
+ 810   2              if ( siiReadByteHDMIRXP1( RX_AUDP_STAT_ADDR ) & RX_BIT_LAYOUT_1 )
+ 811   2                  SiI_Inf.AudioStatus.bNumberChannels = SiI_RX_NumAudCh_UnknownMulti;
+ 812   2              else
+ 813   2                  SiI_Inf.AudioStatus.bNumberChannels = SiI_RX_NumAudCh_2;
+ 814   2          }
+ 815   1      }
+ 816          
+ 817          //------------------------------------------------------------------------------
+ 818          // Function Name: siiSetAutoFIFOReset
+ 819          // Function Description:  this function enables or disables Auto FIFO reset
+ 820          //------------------------------------------------------------------------------
+ 821          void siiSetAutoFIFOReset (BOOL qOn){
+ 822   1          if ( ( SiI_Ctrl.bDevId == RX_SiI9125 ) || ( SiI_Ctrl.bDevId == RX_SiI9135 ) ) {
+ 823   2        
+ 824   2          if ( qOn )
+ 825   2            siiIIC_RX_RWBitsInByteP0(RX_SWRST_ADDR2, RX_BIT_AUDIOFIFO_AUTO, SET);// YMA 9135 only
+ 826   2          else
+ 827   2            siiIIC_RX_RWBitsInByteP0(RX_SWRST_ADDR2, RX_BIT_AUDIOFIFO_AUTO, CLR);
+ 828   2        }
+ 829   1      }
+ 830          
+ 831          //------------------------------------------------------------------------------
+ 832          // Function Name: siiPrepareTurningAudioOn
+ 833          // Function Description: check audio and preparing for turning on
+ 834          //
+ 835          // Accepts: none
+ 836          // Returns: none
+ 837          // Globals: none
+ 838          //------------------------------------------------------------------------------
+ 839          BOOL siiPrepareTurningAudioOn( void ){
+ 840   1      BOOL qResult = FALSE;
+ 841   1      
+ 842   1      //YMA removed: it is done in ISR, should not be called again here since the intr is cleared in ISR already
+ 843   1      //siiChangeAudioStreamHandler();
+ 844   1          if ( siiReadByteHDMIRXP1 ( RX_AUDP_STAT_ADDR) & BIT_DSD_STATUS ){
+ 845   2              halSetAudioDACMode ( SiI_RX_AudioRepr_DSD );
+ 846   2          }
+ 847   1      
+ 848   1          else {
+ 849   2              halSetAudioDACMode ( SiI_RX_AudioRepr_PCM );
+ 850   2          }
+ 851   1          siiSetDigitalAudioMux();
+ 852   1          if (!CheckCTSChanged()){
+ 853   2              if ( CheckPLLUnLockAndReCheckAudio() ){
+ 854   3                  SetAudioClock();
+ 855   3                  PrepareAACOn();   // MJ: Moved outside if to fix I2S DSD Audio FIFO Bug 3056
+ 856   3                  SiI_Inf.bAudioErr = ResetFIFO_AndCheckItsOperation();
+ 857   3                  if ( !SiI_Inf.bAudioErr ) {
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 15  
+
+ 858   4                      //PrepareAACOn();
+ 859   4                      AudioExceptionsControl(ON);
+ 860   4      
+ 861   4                       WakeUpAudioDAC();
+ 862   4      //           halSetAudioDACMode(SiI_Inf.AudioStatus.bRepresentation);
+ 863   4                      qResult = TRUE;
+ 864   4                  }
+ 865   3                  else {
+ 866   4                      ClearAudioClock();
+ 867   4                  }
+ 868   3              }
+ 869   2          }
+ 870   1          else
+ 871   1              SiI_Inf.bAudioErr = SiI_EC_CTS_Changed;
+ 872   1          return qResult;
+ 873   1      }
+ 874          //------------------------------------------------------------------------------
+ 875          // Function Name: DisableAudioOutputs
+ 876          // Function Description: Disable SPDIF/I2S
+ 877          //------------------------------------------------------------------------------
+ 878          void DisableAudioOutputs( void ){
+ 879   1      
+ 880   1          siiWriteByteHDMIRXP1( RX_AUDIO_CTRL_ADDR, 0x18);     // Disable SCK, SPDIF, Enable I2S/DSD
+ 881   1          siiIIC_RX_RWBitsInByteP1( RX_I2S_CTRL2_ADDR, RX_BITS_SD0_SD3_EN, CLR );
+ 882   1      }
+ 883          //------------------------------------------------------------------------------
+ 884          // Function Name: siiTurningAudio
+ 885          // Function Description: turning Audio On/Off
+ 886          //
+ 887          // Accepts: none
+ 888          // Returns: none
+ 889          // Globals: none
+ 890          //------------------------------------------------------------------------------
+ 891          void siiTurningAudio( BOOL qOn ){
+ 892   1      
+ 893   1          if ( qOn ){
+ 894   2              PowerDownAudioDAC();
+ 895   2              siiAudioMute( OFF );
+ 896   2              WakeUpAudioDAC();
+ 897   2              halClearHardwareAudioMute();
+ 898   2          }
+ 899   1          else {
+ 900   2              AudioExceptionsControl( OFF );
+ 901   2              halSetHardwareAudioMute();
+ 902   2              PowerDownAudioDAC();
+ 903   2              siiAudioMute( ON );
+ 904   2              DisableAudioOutputs();
+ 905   2      
+ 906   2          }
+ 907   1      }
+ 908          
+ 909          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2112    ----
+   CONSTANT SIZE    =     60    ----
+   XDATA SIZE       =      6      30
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----      19
+C51 COMPILER V9.51   SIIAUDIO                                                              05/29/2013 17:33:55 PAGE 16  
+
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

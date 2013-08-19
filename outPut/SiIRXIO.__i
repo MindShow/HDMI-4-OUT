@@ -1,0 +1,1 @@
+"sii9135\SiIRXIO.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\SiIRXIO.lst) TABS (2) PREPRINT(.\outPut\SiIRXIO.i) OBJECT(.\outPut\SiIRXIO.obj)

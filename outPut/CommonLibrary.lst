@@ -1,0 +1,55 @@
+C51 COMPILER V9.00   COMMONLIBRARY                                                         07/31/2013 09:43:01 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE COMMONLIBRARY
+OBJECT MODULE PLACED IN .\outPut\CommonLibrary.obj
+COMPILER INVOKED BY: D:\keil\C51\BIN\C51.EXE app\CommonLibrary.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECT
+                    -EXTEND PRINT(.\outPut\CommonLibrary.lst) TABS(2) PREPRINT(.\outPut\CommonLibrary.i) OBJECT(.\outPut\CommonLibrary.obj)
+
+line level    source
+
+   1          /******************** (C) COPYRIGHT 2012 Justchen and someone ********************
+   2          * File Name          : CommonLibrary.c
+   3          * Author             : Justchen
+   4          * Version            : V1.0
+   5          * Date               : 5/06/2013
+   6          * Description        : Common C Libraries
+   7          ********************************************************************************/
+   8          
+   9          
+  10          
+  11          #include "CommonLibrary.h"
+  12          
+  13          
+  14          
+  15          
+  16          void Delay_ms(ushort z)
+  17          {
+  18   1        /*data uchar m,n;
+  19   1        for( ;i>0;i--){   //T=3+[2*163*3+3*3+8]*i=3+995*i
+  20   1          for(m=3;m>0;m--){
+  21   1            for(n=162;n>0;n--)
+  22   1            {
+  23   1              ;
+  24   1            }
+  25   1          }
+  26   1        }*/
+  27   1        ushort x,y;
+  28   1        for(x=z;x>0;x--)
+  29   1        for(y=848;y>0;y--);
+  30   1      }
+  31          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     30    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

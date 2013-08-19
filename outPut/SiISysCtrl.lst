@@ -1,0 +1,297 @@
+C51 COMPILER V9.51   SIISYSCTRL                                                            05/29/2013 17:32:13 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIISYSCTRL
+OBJECT MODULE PLACED IN .\outPut\SiISysCtrl.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiISysCtrl.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJEC
+                    -TEXTEND PRINT(.\outPut\SiISysCtrl.lst) TABS(2) PREPRINT(.\outPut\SiISysCtrl.i) OBJECT(.\outPut\SiISysCtrl.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name
+   3          // ---
+   4          // Module Description…
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiISysCtrl.h"
+  15          #include "SiIGlob.h"
+  16          #include "SiIHAL.h"
+  17          #include "SiIRXDefs.h"
+  18          #include "SiIRXAPIDefs.h"
+  19          #include "SiITrace.h"
+  20          #include "SiIHDMIRX.h"
+  21          #include "SiIAudio.h"
+  22          #include "SiIVidF.h"
+  23          #include "SiITTInfoPkts.h"
+  24          #include "UAudDAC.h"
+  25          //------------------------------------------------------------------------------
+  26          // Function Name: siiSaveRXInitParameters()
+  27          // Function Description:
+  28          //
+  29          // Accepts: none
+  30          // Returns: none
+  31          // Globals: none
+  32          //------------------------------------------------------------------------------
+  33          void siiSaveRXInitParameters ( BYTE * pbParameter ) {
+  34   1      
+  35   1          SiI_Ctrl.bRXInitPrm0 = pbParameter[0];
+  36   1        SiI_Inf.AVI.bOutputColorDepth=pbParameter[1]; //YMA fix
+  37   1      //    SiI_Ctrl.bVidInChannel = pbParameter[1]; //YMA wrong info saved
+  38   1      //    SiI_Ctrl.bVidInChannel = pbParameter[2]; 
+  39   1      
+  40   1      }
+  41          //------------------------------------------------------------------------------
+  42          // Function Name: siiGetRXInitParameters()
+  43          // Function Description:
+  44          //
+  45          // Accepts: none
+  46          // Returns: none
+  47          // Globals: none
+  48          //------------------------------------------------------------------------------
+  49          void siiGetRXInitParameters ( BYTE * pbParameter ) {
+  50   1      
+  51   1          pbParameter[0] = SiI_Ctrl.bRXInitPrm0;       // FPGA and MClock
+  52   1        pbParameter[1] = SiI_Inf.AVI.bOutputColorDepth; //YMA fix
+  53   1      //    pbParameter[1] = SiI_Ctrl.bVidInChannel;     // Video input id
+  54   1      //    pbParameter[2] = SiI_Ctrl.bVidInChannel;     // Video input id
+C51 COMPILER V9.51   SIISYSCTRL                                                            05/29/2013 17:32:13 PAGE 2   
+
+  55   1      
+  56   1      
+  57   1      }
+  58          //------------------------------------------------------------------------------
+  59          // Function Name: siiInitilizeSystemData
+  60          // Function Description:
+  61          //
+  62          // Accepts: BOOL Key for initilization System data
+  63          // Returns: none
+  64          // Globals: none
+  65          //------------------------------------------------------------------------------
+  66          BYTE siiInitilizeSystemData( BOOL qDoFromScratch ){
+  67   1      BYTE bEWCode = FALSE;
+  68   1      
+  69   1          if ( qDoFromScratch ) {
+  70   2      
+  71   2              SiI_Ctrl.wAudioOutputSelect = SiI_RX_AOut_Default;
+  72   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_AudioOff;
+  73   2              halWakeUpAudioDAC();
+  74   2              PowerDownAudioDAC();
+  75   2              SiI_Inf.bGlobStatus = SiI_RX_GlobalHDMI_NoAVIPacket | SiI_RX_Global_OldHotPlugDetect;
+  76   2          }
+  77   1          else {
+  78   2                // clear these these flags and retain others
+  79   2              SiI_Inf.bGlobStatus = ~( SiI_RX_Global_HotPlugDetect | SiI_RX_GlobalHDMI_Detected
+  80   2                                      | SiI_RX_GlobalHDMI_ACP | SiI_RX_GlobalHDMI_NoAVIPacket );
+  81   2      
+  82   2          }
+  83   1          siiResetACPPacketData ( );
+  84   1          SiI_Ctrl.sm_bVideo = SiI_RX_VS_PowerDown;
+  85   1        SiI_Ctrl.wVideoTimeOut = 20;//YMA PD issue fix
+  86   1      
+  87   1      
+  88   1        
+  89   1      
+  90   1          SiI_Ctrl.bShadowPixRepl = 0;
+  91   1          SiI_Ctrl.bIgnoreIntr = 0;
+  92   1          SiI_Ctrl.bHDCPFailFrmCnt = 0;
+  93   1          SiI_Ctrl.bHDCPStuckConfirmCnt = 0;
+  94   1      
+  95   1        SiI_Inf.AVI.bInputColorDepth = SiI_RX_CD_24BPP;
+  96   1      
+  97   1          SiI_Inf.bVResId = 0;
+  98   1          SiI_Inf.AVI.bAVI_State = SiI_RX_NoAVI;
+  99   1          SiI_Inf.AVI.bColorimetry = SiI_RX_ColorimetryNoInfo;
+ 100   1          SiI_Inf.AVI.bInputColorSpace = SiI_RX_ICP_RGB;
+ 101   1          SiI_Inf.AVI.bPixRepl = 0;
+ 102   1          SiI_Inf.bNewInfoPkts = 0;
+ 103   1      
+ 104   1          return bEWCode;
+ 105   1      }
+ 106          
+ 107          //------------------------------------------------------------------------------
+ 108          // Function Name: siiConvertTicksInMS
+ 109          // Function Description: Converts System timer ticks in milliseconds
+ 110          //
+ 111          // Accepts: wTicks
+ 112          // Returns: wMS
+ 113          // Globals: none
+ 114          //------------------------------------------------------------------------------
+ 115          WORD siiConvertTicksInMS( WORD wTicks ){
+ 116   1      WORD wMS;
+C51 COMPILER V9.51   SIISYSCTRL                                                            05/29/2013 17:32:13 PAGE 3   
+
+ 117   1      DWORD dwUS;
+ 118   1      
+ 119   1          dwUS = wTicks * SII_SYS_TICK_TIME; // SII_SYS_TICK_TIME in US
+ 120   1          wMS = dwUS / 1000;
+ 121   1          return wMS;
+ 122   1      
+ 123   1      }
+ 124          
+ 125          #ifndef FIXED_TASK_CALL_TIME
+ 126          //------------------------------------------------------------------------------
+ 127          // Function Name:  siiDoTasksTimeDiffrence
+ 128          // Function Description:   Function is called in DoTasks
+ 129          //
+ 130          // Accepts:
+ 131          // Returns:  TimeDifference
+ 132          // Globals:
+ 133          //------------------------------------------------------------------------------
+ 134          BYTE siiDoTasksTimeDiffrence ( void ) {
+ 135   1      WORD wTicksNumber;
+ 136   1      WORD wTicksDiff;
+ 137   1      
+ 138   1          wTicksNumber = siiGetTicksNumber();
+ 139   1      
+ 140   1          if ( wTicksNumber >= SiI_Ctrl.SysTimer.wProcLastDoTasks_Ticks )
+ 141   1              wTicksDiff = wTicksNumber - SiI_Ctrl.SysTimer.wProcLastDoTasks_Ticks;
+ 142   1          else
+ 143   1              wTicksDiff = SiI_Ctrl.SysTimer.wProcLastDoTasks_Ticks - wTicksNumber;
+ 144   1      
+ 145   1          SiI_Ctrl.SysTimer.wProcLastDoTasks_Ticks = wTicksNumber;
+ 146   1      
+ 147   1          return siiConvertTicksInMS ( wTicksDiff );
+ 148   1      
+ 149   1      }
+ 150          #endif
+ 151          //------------------------------------------------------------------------------
+ 152          // Function Name: siiMeasureProcLastAPI_Ticks
+ 153          // Function Description:  This function is used for time measuring, time differnce shouldn't
+ 154          //                        exceed 0xFFFF ticks
+ 155          // Accepts: none
+ 156          // Returns: Number ticks spent for execution of task
+ 157          // Globals: SiI_Ctrl.SysTimer.wProcLastAPI_Ticks
+ 158          //------------------------------------------------------------------------------
+ 159          void siiMeasureProcLastAPI_Ticks ( WORD wStartTimeInTicks ){
+ 160   1      WORD wNewTimeInTicks;
+ 161   1      
+ 162   1          wNewTimeInTicks = siiGetTicksNumber();
+ 163   1      
+ 164   1          if ( wNewTimeInTicks > wStartTimeInTicks )  // check for roll over
+ 165   1              SiI_Ctrl.SysTimer.wProcLastAPI_Ticks = wNewTimeInTicks - wStartTimeInTicks;
+ 166   1          else
+ 167   1              SiI_Ctrl.SysTimer.wProcLastAPI_Ticks = ( 0xFFFF - wNewTimeInTicks ) + wStartTimeInTicks;
+ 168   1      }
+ 169          
+ 170          //------------------------------------------------------------------------------
+ 171          // Function Name: siiDiagnostic_GetAPI_ExeTime
+ 172          // Function Description: this function takes time for the last executed API and convert it
+ 173          //                       from ticks to ms
+ 174          // Accepts: none
+ 175          // Returns: BYTE * pbAPI_ExeTime
+ 176          // Globals: none
+ 177          //------------------------------------------------------------------------------
+ 178          void siiDiagnostic_GetAPI_ExeTime(BYTE * pbAPI_ExeTime ){
+C51 COMPILER V9.51   SIISYSCTRL                                                            05/29/2013 17:32:13 PAGE 4   
+
+ 179   1      WORD wExeTime;
+ 180   1      
+ 181   1          wExeTime = siiConvertTicksInMS ( SiI_Ctrl.SysTimer.wProcLastAPI_Ticks );
+ 182   1          pbAPI_ExeTime[0] = (BYTE) ( wExeTime & 0x00FF );
+ 183   1          pbAPI_ExeTime[1] = (BYTE) (( wExeTime & 0xFF00 ) >> 8 );
+ 184   1      
+ 185   1      }
+ 186          
+ 187          //------------------------------------------------------------------------------
+ 188          // Function Name: siiGetEventChenges
+ 189          // Function Description:  Reports about main changes in system
+ 190          //
+ 191          // Accepts: none
+ 192          // Returns: BYTE, change events
+ 193          // Globals: none
+ 194          //------------------------------------------------------------------------------
+ 195          BYTE siiGetSMEventChanges ( void ){
+ 196   1      BYTE bResult = 0;
+ 197   1      static BYTE sm_bVideo = SiI_RX_VS_PowerDown;          // values should be same as initalized  in siiInitil
+             -izeSystemData
+ 198   1      static BYTE sm_bAudio = SiI_RX_AS_AudioOff;
+ 199   1      static BYTE bHDCPStatus = 0;
+ 200   1      static BYTE bGlobStatus = 0;
+ 201   1      
+ 202   1          if ( sm_bVideo != SiI_Ctrl.sm_bVideo ){
+ 203   2              bResult |= SiI_RX_API_VideoSM_Changed;
+ 204   2              sm_bVideo = SiI_Ctrl.sm_bVideo;
+ 205   2          }
+ 206   1          if ( sm_bAudio != SiI_Ctrl.sm_bAudio ){
+ 207   2              bResult |= SiI_RX_API_AudioSM_Changed;
+ 208   2              sm_bAudio = SiI_Ctrl.sm_bAudio;
+ 209   2          }
+ 210   1          if ( SiI_Inf.bNewInfoPkts )
+ 211   1              bResult |= SiI_RX_API_InfoPacket_Changed;
+ 212   1          if ( bHDCPStatus != SiI_Inf.bHDCPStatus ) {
+ 213   2              bResult |= SiI_RX_API_HDCPStatus_Changed;
+ 214   2              bHDCPStatus = SiI_Inf.bHDCPStatus;
+ 215   2          }
+ 216   1          if ( bGlobStatus != SiI_Inf.bGlobStatus) {
+ 217   2              bGlobStatus = SiI_Inf.bGlobStatus;
+ 218   2              bResult |= SiI_RX_API_GlobalStatus_Changed;
+ 219   2          }
+ 220   1      
+ 221   1          return bResult;
+ 222   1      
+ 223   1      }
+ 224          
+ 225          
+ 226          
+ 227          //------------------------------------------------------------------------------
+ 228          // Function Name: siiReInitRX
+ 229          // Function Description:  This function is used to Re-inialize HDMI RX after Hardware reset
+ 230          // Accepts: none
+ 231          // Returns: none
+ 232          // Globals: none
+ 233          //------------------------------------------------------------------------------
+ 234          void siiReInitRX( void ){
+ 235   1      BYTE abData[3];
+ 236   1      AudioOutputFormatType AudioOutputFormat;
+ 237   1      
+ 238   1      
+ 239   1          siiGetRXInitParameters ( abData );             // Gets MClock divider and active TMDS core
+C51 COMPILER V9.51   SIISYSCTRL                                                            05/29/2013 17:32:13 PAGE 5   
+
+ 240   1          siiGetAudioOutputFormat( &AudioOutputFormat ); // Get Audio Format Setting, some setting stored in RX 
+             -regs. so it's
+ 241   1                                                         // Need to do before hardware reset
+ 242   1      
+ 243   1          siiInitializeRX( abData );                     // in this function  RX Hardware Reset is used
+ 244   1          siiInitilizeSystemData( OFF );                 // Intilize System Data with Key OFF
+ 245   1                                                         // with OFF key Video/Audio Format cfg. data is not mod
+             -ified
+ 246   1      // Now it's need to restore Aideo Output Format
+ 247   1          siiSetAudioOutputFormat( &AudioOutputFormat ); // Restore RX Audio Format Configuration
+ 248   1      
+ 249   1      // Set Video Format static settings
+ 250   1          abData[0] = abData[1] = abData[2] = 0;         // Restore RX Video Format Configuration
+ 251   1          siiGetVideoFormatData( abData );       //YMA restore the configuration, or outpout depth losted   
+ 252   1          siiPrepSyncSelect( SiI_Ctrl.VideoF.bOutputSyncSelect, abData );
+ 253   1          siiPrepSyncCtrl( SiI_Ctrl.VideoF.bOutputSyncCtrl, abData );
+ 254   1          siiPrepVideoCtrl( SiI_Ctrl.VideoF.bOutputVideoCtrl, abData );
+ 255   1          siiSetVideoFormatData( abData ); // Update RX Video format cfg. at Vid. Mode/Ctrl regs.
+ 256   1      
+ 257   1      }
+ 258          
+ 259          
+ 260          
+ 261          
+ 262          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    507    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      4      17
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

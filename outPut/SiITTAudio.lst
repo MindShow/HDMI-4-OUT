@@ -1,0 +1,356 @@
+C51 COMPILER V9.51   SIITTAUDIO                                                            05/29/2013 17:36:14 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIITTAUDIO
+OBJECT MODULE PLACED IN .\outPut\SiITTAudio.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiITTAudio.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJEC
+                    -TEXTEND PRINT(.\outPut\SiITTAudio.lst) TABS(2) PREPRINT(.\outPut\SiITTAudio.i) OBJECT(.\outPut\SiITTAudio.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiITTAudio
+   3          //
+   4          // Module Description:    Serves Audio Timeing evevts and audio state machine
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiIGlob.h"
+  15          #include "SiITTAudio.h"
+  16          #include "SiITTVideo.h" // need to sync with video
+  17          #include "SiIAudio.h"
+  18          #include "SiITrace.h"
+  19          #include "SiIHAL.h"
+  20          
+  21          #ifdef SII_DUMP_UART
+  22          #include "SiIISR.h"
+  23          #include <stdio.h>
+  24          #endif
+  25          
+  26          //------------------------------------------------------------------------------
+  27          // Function Name: siiIsAudioHoldMuteState
+  28          // Function Description:  This function checks state machine, if state SiI_RX_AS_HoldAudioMute
+  29          //                        then return true
+  30          //
+  31          // Accepts: none
+  32          // Returns: BOOL
+  33          // Globals: none
+  34          //------------------------------------------------------------------------------
+  35          BOOL siiIsAudioHoldMuteState ( void ) {
+  36   1      BOOL qResult = FALSE;
+  37   1      
+  38   1          if ( SiI_Ctrl.sm_bAudio == SiI_RX_AS_HoldAudioMute )
+  39   1              qResult = TRUE;
+  40   1          return qResult;
+  41   1      }
+  42          
+  43          //------------------------------------------------------------------------------
+  44          // Function Name: SetTimeOutOandSM_ReqWaitVideoOn
+  45          // Function Description:  assign this state and time out in order to sync Audio with Video
+  46          //
+  47          // Accepts: none
+  48          // Returns: none
+  49          // Globals: SiI_Ctrl.sm_bAudio, SiI_Ctrl.wAudioTimeOut
+  50          //------------------------------------------------------------------------------
+  51          static void SetTimeOutandSM_ReqWaitVideoOn( void ){
+  52   1      
+  53   1          SiI_Ctrl.sm_bAudio = SiI_RX_AS_WaitVideoOn;
+  54   1          SiI_Ctrl.wAudioTimeOut = 16;
+C51 COMPILER V9.51   SIITTAUDIO                                                            05/29/2013 17:36:14 PAGE 2   
+
+  55   1      }
+  56          //------------------------------------------------------------------------------
+  57          // Function Name: siiIsAudioStatusReady
+  58          // Function Description:  This function checks state machine, if state AudioOn
+  59          //                        then return true
+  60          //
+  61          // Accepts: none
+  62          // Returns: BOOL
+  63          // Globals: none
+  64          //------------------------------------------------------------------------------
+  65          BOOL siiIsAudioStatusReady( void ){
+  66   1      BOOL qResult = FALSE;
+  67   1      
+  68   1          if ( SiI_Ctrl.sm_bAudio == SiI_RX_AS_AudioOn )
+  69   1              qResult = TRUE;
+  70   1          return qResult;
+  71   1      }
+  72          
+  73          //------------------------------------------------------------------------------
+  74          // Function Name: siiSetSM_ReqAudio
+  75          // Function Description:  asserts  SiI_RX_AS_ReqAudio, this state starts check Audio conditions
+  76          //                        exception asserted SiI_RX_AS_HoldAudioMute state
+  77          //
+  78          //
+  79          // Accepts: none
+  80          // Returns: none
+  81          // Globals: none
+  82          //------------------------------------------------------------------------------
+  83          void siiSetSM_ReqAudio( void ){
+  84   1          if ( SiI_Ctrl.sm_bAudio != SiI_RX_AS_HoldAudioMute ) { // Audio mute which is asserted by API command 
+             -can be
+  85   2                                                                 // can be de-asserted only by command
+  86   2      
+  87   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_ReqAudio;
+  88   2              SiI_Ctrl.wAudioTimeOut = 5;
+  89   2          }
+  90   1      }
+  91          //------------------------------------------------------------------------------
+  92          // Function Name: SetSM_HoldAudioMute
+  93          // Function Description:  asserts and deaserts SiI_RX_AS_HoldAudioMute
+  94          //                        only by this function iI_RX_AS_HoldAudioMute can be deasserted
+  95          //------------------------------------------------------------------------------
+  96          static void SetSM_HoldAudioMute( BOOL qOn ){
+  97   1      
+  98   1          if ( qOn ) {
+  99   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_HoldAudioMute;
+ 100   2              SiI_Ctrl.wAudioTimeOut = 0;
+ 101   2          }
+ 102   1          else {
+ 103   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_ReqAudio;
+ 104   2              SiI_Ctrl.wAudioTimeOut = 5;
+ 105   2          }
+ 106   1      
+ 107   1      }
+ 108          //------------------------------------------------------------------------------
+ 109          // Function Name: SetSM_AudioOff
+ 110          // Function Description:   this function sets SiI_RX_AS_AudioOff, exception
+ 111          //                         asserted SiI_RX_AS_HoldAudioMute state
+ 112          //------------------------------------------------------------------------------
+ 113          static void SetSM_AudioOff( void ){
+ 114   1          if ( SiI_Ctrl.sm_bAudio != SiI_RX_AS_HoldAudioMute ) { // Audio mute which is asserted by API command 
+             -can be
+C51 COMPILER V9.51   SIITTAUDIO                                                            05/29/2013 17:36:14 PAGE 3   
+
+ 115   2                                                                 // can be de-asserted only by command
+ 116   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_AudioOff;
+ 117   2              SiI_Ctrl.wAudioTimeOut = 200;  // # ms being quiet, (not to attepmt bring up Audio)
+ 118   2          }
+ 119   1      }
+ 120          //------------------------------------------------------------------------------
+ 121          // Function Name: siiTurnAudioOffAndSetSM_AudioOff
+ 122          // Function Description: This function calls turning Audio Off, and changes state of the state machine
+ 123          //
+ 124          // Accepts: none
+ 125          // Returns: none
+ 126          // Globals: none
+ 127          //------------------------------------------------------------------------------
+ 128          void siiTurnAudioOffAndSetSM_AudioOff( void ){
+ 129   1      //  siiSetAutoFIFOReset(OFF);
+ 130   1          siiTurningAudio( OFF );
+ 131   1          SetSM_AudioOff();
+ 132   1      }
+ 133          //------------------------------------------------------------------------------
+ 134          // Function Name: siiSetGlobalAudioMuteAndSM_Audio
+ 135          // Function Description: Asserts or Deasserts Audio Mute
+ 136          //
+ 137          // Accepts: BOOL
+ 138          // Returns: none
+ 139          // Globals: none
+ 140          //------------------------------------------------------------------------------
+ 141          void siiSetGlobalAudioMuteAndSM_Audio( BOOL qOn ){
+ 142   1          if ( qOn ) {
+ 143   2              siiSetAudioMuteEvent();
+ 144   2              SetSM_HoldAudioMute( ON );
+ 145   2          }
+ 146   1          else {
+ 147   2              SetSM_HoldAudioMute( OFF );
+ 148   2      
+ 149   2          }
+ 150   1      
+ 151   1      }
+ 152          //------------------------------------------------------------------------------
+ 153          
+ 154          // Function Name: siiSetSM_ReqHoldAudioMute 
+ 155          // Function Description:  This function emolliates waiting for Soft Muting, it should 
+ 156          // be used to wait when audio soft mute is ramping down  
+ 157          // Accepts: none                         
+ 158          // Returns: none
+ 159          //------------------------------------------------------------------------------
+ 160          
+ 161          
+ 162          void siiSetSM_ReqHoldAudioMuteAndStartMuting ( BOOL qOn ){
+ 163   1          if ( qOn ) {
+ 164   2          siiAudioMute( ON );   
+ 165   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_ReqHoldAudioMute;
+ 166   2              SiI_Ctrl.wAudioTimeOut = 50; // delays for 50 ms
+ 167   2          }
+ 168   1        else {
+ 169   2              SetSM_HoldAudioMute( OFF );
+ 170   2      
+ 171   2          }
+ 172   1      
+ 173   1      
+ 174   1      }
+ 175          //------------------------------------------------------------------------------
+ 176          // Function Name: CheckAudio_IfOK_InitACR
+C51 COMPILER V9.51   SIITTAUDIO                                                            05/29/2013 17:36:14 PAGE 4   
+
+ 177          // Function Description: If Audio is OK and ACR init., then set time after which
+ 178          // CTS change interrupt can be cleared (used for STS stability check later)
+ 179          //------------------------------------------------------------------------------
+ 180          static void CheckAudio_IfOK_InitACR( void ){
+ 181   1      
+ 182   1          siiClearCTSChangeInterruprt();
+ 183   1          if ( siiCheckAudio_IfOK_InitACR()){
+ 184   2      
+ 185   2              SiI_Ctrl.wAudioTimeOut = 4;
+ 186   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_StartCheckCTS_Stable;
+ 187   2          }
+ 188   1          else {
+ 189   2              SetSM_AudioOff();
+ 190   2          }
+ 191   1      
+ 192   1      }
+ 193          //------------------------------------------------------------------------------
+ 194          // Function Name: StartCheckCTS_Stable
+ 195          // Function Description: Call clear CTS change interrupt, change state machine for waiting PLL Lock
+ 196          //------------------------------------------------------------------------------
+ 197          static void StartCheckCTS_Stable( void ){
+ 198   1              siiClearCTSChangeInterruprt();
+ 199   1              SiI_Ctrl.sm_bAudio = SiI_RX_AS_WaitAudioPPLLock;
+ 200   1              SiI_Ctrl.wAudioTimeOut = 150;  // Set wait # ms for PLL Locking
+ 201   1      
+ 202   1      }
+ 203          //------------------------------------------------------------------------------
+ 204          // Function Name: PrepareTurningAudioOn
+ 205          // Function Description: If Audio prepered for turning on (  waked up Audio DAC),
+ 206          //                       hten set delay when Audio DAC will be ready
+ 207          //------------------------------------------------------------------------------
+ 208          static void PrepareTurningAudioOn( void ){
+ 209   1      
+ 210   1      
+ 211   1          if ( siiPrepareTurningAudioOn() ){
+ 212   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_WaitAudioDACReady;
+ 213   2              SiI_Ctrl.wAudioTimeOut = SiI_RX_DelayAudio_WaitDACWakingUp; // Set wait # ms, when Audio DAC will 
+             -be ready
+ 214   2          }
+ 215   1          else {
+ 216   2              SiI_Ctrl.sm_bAudio = SiI_RX_AS_AudioOff;
+ 217   2              SiI_Ctrl.wAudioTimeOut = 200; // # ms being quiet, (not to attepmt bring up Audio)
+ 218   2          }
+ 219   1      }
+ 220          //------------------------------------------------------------------------------
+ 221          // Function Name: TurningAudioOn
+ 222          // Function Description: call teurning Audio On and change state machine to Audio On
+ 223          //------------------------------------------------------------------------------
+ 224          static void TurningAudioOn_SetSM_WaitStatusLock( void ){
+ 225   1          siiTurningAudio( ON );
+ 226   1          SiI_Ctrl.sm_bAudio = SiI_RX_AS_AudioOnWaitLockStatus;
+ 227   1          SiI_Ctrl.wAudioTimeOut = 700; // # ms being quiet, (not to attepmt bring up Audio)
+ 228   1      }
+ 229          //------------------------------------------------------------------------------
+ 230          // Function Name:
+ 231          // Function Description:
+ 232          //------------------------------------------------------------------------------
+ 233          static void LockAudioStatusSetSM_AudioOn( void ){
+ 234   1          siiSaveInputAudioStatus();
+ 235   1          SiI_Ctrl.sm_bAudio = SiI_RX_AS_AudioOn;
+ 236   1      }
+ 237          
+C51 COMPILER V9.51   SIITTAUDIO                                                            05/29/2013 17:36:14 PAGE 5   
+
+ 238          
+ 239          
+ 240          //------------------------------------------------------------------------------
+ 241          // Function Name:   siiTTAudioHandler
+ 242          // Function Description:  Calls processing of Audio Timing Events
+ 243          //
+ 244          // Accepts: none
+ 245          // Returns: none
+ 246          // Globals: none
+ 247          //------------------------------------------------------------------------------
+ 248          BYTE siiTTAudioHandler( BOOL qTimeOut ){
+ 249   1      BYTE bECode = FALSE;
+ 250   1      
+ 251   1          switch ( SiI_Ctrl.sm_bAudio ){
+ 252   2      
+ 253   2              case SiI_RX_AS_ReqAudio:
+ 254   2                      if  ( qTimeOut )
+ 255   2                          CheckAudio_IfOK_InitACR();
+ 256   2                      break;
+ 257   2              case SiI_RX_AS_StartCheckCTS_Stable:
+ 258   2                      if  ( qTimeOut ){
+ 259   3                          StartCheckCTS_Stable();
+ 260   3                          siiClearGotCTSAudioPacketsIterrupts();
+ 261   3                      }
+ 262   2                      break;
+ 263   2              case SiI_RX_AS_WaitAudioPPLLock:
+ 264   2                      if  ( qTimeOut )
+ 265   2                          PrepareTurningAudioOn();
+ 266   2                      break;
+ 267   2              case SiI_RX_AS_AudioOff:
+ 268   2                      if  ( qTimeOut ){
+ 269   3                          siiSetSM_ReqAudio();
+ 270   3                          siiClearGotCTSAudioPacketsIterrupts();
+ 271   3                      }
+ 272   2                      break;
+ 273   2              case SiI_RX_AS_WaitAudioDACReady:
+ 274   2                      if  ( qTimeOut ){
+ 275   3                          if ( siiIsVideoOn() )  {
+ 276   4      #ifdef SII_DUMP_UART
+ 277   4                              siiTraceRXInterrupts ();
+ 278   4      #endif
+ 279   4                              TurningAudioOn_SetSM_WaitStatusLock();
+ 280   4      #ifdef SII_DUMP_UART
+ 281   4                              printf (" Aud On ");
+ 282   4      #endif
+ 283   4                          }
+ 284   3                          else
+ 285   3                              SetTimeOutandSM_ReqWaitVideoOn();
+ 286   3                      }
+ 287   2                      break;
+ 288   2              case SiI_RX_AS_AudioOnWaitLockStatus:
+ 289   2                      if  ( qTimeOut ){
+ 290   3                          LockAudioStatusSetSM_AudioOn();
+ 291   3                      }
+ 292   2                      break;
+ 293   2      
+ 294   2              case SiI_RX_AS_HoldAudioMute:
+ 295   2                      // Do nothing, a global Audio Mute is asserted!
+ 296   2                      break;
+ 297   2              case SiI_RX_AS_WaitVideoOn:
+ 298   2                      if  ( qTimeOut ){
+ 299   3                          if ( siiIsVideoOn() )
+C51 COMPILER V9.51   SIITTAUDIO                                                            05/29/2013 17:36:14 PAGE 6   
+
+ 300   3                              TurningAudioOn_SetSM_WaitStatusLock();
+ 301   3                          else
+ 302   3                              SetTimeOutandSM_ReqWaitVideoOn();
+ 303   3                      }
+ 304   2                      break;
+ 305   2          case SiI_RX_AS_ReqHoldAudioMute:
+ 306   2              if  ( qTimeOut ){
+ 307   3                        SetSM_HoldAudioMute( ON );  
+ 308   3                        siiTurnAudioOffAndSetSM_AudioOff( );
+ 309   3              }
+ 310   2                      break;
+ 311   2      
+ 312   2      
+ 313   2      
+ 314   2          }
+ 315   1          bECode = SiI_Inf.bAudioErr;
+ 316   1          return bECode;
+ 317   1      
+ 318   1      }
+ 319          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    399    ----
+   CONSTANT SIZE    =      9    ----
+   XDATA SIZE       =   ----       1
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       6
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

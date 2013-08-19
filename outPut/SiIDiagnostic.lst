@@ -1,0 +1,74 @@
+C51 COMPILER V9.51   SIIDIAGNOSTIC                                                         05/29/2013 17:36:09 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIDIAGNOSTIC
+OBJECT MODULE PLACED IN .\outPut\SiIDiagnostic.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIDiagnostic.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OB
+                    -JECTEXTEND PRINT(.\outPut\SiIDiagnostic.lst) TABS(2) PREPRINT(.\outPut\SiIDiagnostic.i) OBJECT(.\outPut\SiIDiagnostic.ob
+                    -j)
+
+line level    source
+
+   1          #include "SiIDiagnostic.h"
+   2          //------------------------------------------------------------------------------
+   3          // Module Name: Diagnostic
+   4          //
+   5          // Module Description: contains a collection of diagnostic functions
+   6          //
+   7          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   8          //
+   9          // No part of this work may be reproduced, modified, distributed, transmitted,
+  10          // transcribed, or translated into any language or computer format, in any form
+  11          // or by any means without written permission of: Silicon Image, Inc.,
+  12          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  13          //------------------------------------------------------------------------------
+  14          
+  15          //------------------------------------------------------------------------------
+  16          // Function Name: siiGetNCTS
+  17          // Function Description: Reads N/CTS packet data from RX registers
+  18          //
+  19          // Accepts: none
+  20          // Returns: pointer on string of bytes
+  21          // Globals: none
+  22          //------------------------------------------------------------------------------
+  23          void siiGetNCTS ( BYTE * pbNCTS ){
+  24   1      
+  25   1      
+  26   1          siiReadBlockHDMIRXP1(  RX_HW_N_VAL_ADDR , 3,  pbNCTS );
+  27   1          pbNCTS[3] = 0;
+  28   1      
+  29   1          siiReadBlockHDMIRXP1(  RX_HW_CTS_ADDR , 3,  &pbNCTS[4] );
+  30   1          pbNCTS[7] = 0;
+  31   1      }
+  32          
+  33          //------------------------------------------------------------------------------
+  34          // Function Name: siiGetABKSV
+  35          // Function Description:  Reads AKSV and BKSV vectors from RX registers
+  36          //
+  37          // Accepts: none
+  38          // Returns: pointer on string of bytes
+  39          // Globals: none
+  40          //------------------------------------------------------------------------------
+  41          void siiGetABKSV ( BYTE * pbABKSV ){
+  42   1      
+  43   1          siiReadBlockHDMIRXP0(  RX_AKSV_ADDR , 5,  pbABKSV );
+  44   1          siiReadBlockHDMIRXP0(  RX_BKSV_ADDR , 5,  &pbABKSV[5] );
+  45   1      
+  46   1      }
+  47          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    120    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       6
+C51 COMPILER V9.51   SIIDIAGNOSTIC                                                         05/29/2013 17:36:09 PAGE 2   
+
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,178 @@
+C51 COMPILER V9.51   SIIDEEPCOLOR                                                          05/29/2013 17:36:09 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIDEEPCOLOR
+OBJECT MODULE PLACED IN .\outPut\SiIDeepColor.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIDeepColor.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJ
+                    -ECTEXTEND PRINT(.\outPut\SiIDeepColor.lst) TABS(2) PREPRINT(.\outPut\SiIDeepColor.i) OBJECT(.\outPut\SiIDeepColor.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name SiIDeepColor
+   3          // Module Description: this file is used to handle Deep Color functions
+   4          //
+   5          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   6          //
+   7          // No part of this work may be reproduced, modified, distributed, transmitted,
+   8          // transcribed, or translated into any language or computer format, in any form
+   9          // or by any means without written permission of: Silicon Image, Inc.,
+  10          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  11          //------------------------------------------------------------------------------
+  12          
+  13          #include "SiIGlob.h"
+  14          #include "SiIRXIO.h"
+  15          #include "SiIRXDefs.h"
+  16          #include "SiIDeepColor.h"
+  17          #include "SiIVidF.h"
+  18          
+  19          //------------------------------------------------------------------------------
+  20          // Function Name: VideoFIFO_Reset
+  21          // Function Description: Makes Video FIFO reset
+  22          //------------------------------------------------------------------------------
+  23          void siiVideoFIFO_Reset( void ){
+  24   1      
+  25   1          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR2, RX_BIT_DCFIFO_RST, SET );
+  26   1          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR2, RX_BIT_DCFIFO_RST, CLR );
+  27   1      
+  28   1      }
+  29          
+  30          
+  31          //------------------------------------------------------------------------------
+  32          // Function Name: siiCheckSupportDeepColorMode
+  33          // Function Description: This function chechs Deep Color mode support
+  34          //
+  35          // Accepts: TRUE/FALSE
+  36          // Returns: none
+  37          // Globals: none
+  38          //------------------------------------------------------------------------------
+  39          BOOL siiCheckSupportDeepColorMode ( void ){
+  40   1      BOOL qResult = FALSE;
+  41   1      
+  42   1          if ( ( SiI_Ctrl.bDevId == RX_SiI9133 )
+  43   1            || ( SiI_Ctrl.bDevId == RX_SiI9125 )
+  44   1            || ( SiI_Ctrl.bDevId == RX_SiI9135 )
+  45   1      //      || ( SiI_Ctrl[ bHDMIDev ].bDevId == RX_SiI8500 )
+  46   1          ) {
+  47   2              qResult = TRUE;
+  48   2          }
+  49   1          return qResult;
+  50   1      
+  51   1      }
+  52          
+  53          //------------------------------------------------------------------------------
+  54          // Function Name: siiResetDeepColorMode
+C51 COMPILER V9.51   SIIDEEPCOLOR                                                          05/29/2013 17:36:09 PAGE 2   
+
+  55          // Function Description: This function sets TMDS registers respecting input color color depth
+  56          // Accepts: none
+  57          // Returns: none
+  58          // Globals: none
+  59          //------------------------------------------------------------------------------
+  60          void siiResetDeepColorMode ( void ) {
+  61   1      
+  62   1          if( SiI_Ctrl.bDevId != RX_SiI9133 )               // reset video FIFO feature only in 9135 and/or afte
+             -r
+  63   1              siiVideoFIFO_Reset();                                                                        //res
+             -et and flush    video FIFO
+  64   1          siiIIC_RX_RMW_ByteP0 ( RX_TMDS_ECTRL_ADDR, RX_DC_CLK_CTRL_MASK, RX_DC_CLK_8BPP_1X );
+  65   1          SiI_Inf.AVI.bInputColorDepth = SiI_RX_CD_24BPP;
+  66   1      //    bRegOldColorDepthStat = SiI_RX_CD_24BPP;
+  67   1      
+  68   1      
+  69   1      }
+  70          //------------------------------------------------------------------------------
+  71          // Function Name: SiI_RX_SetOutputColorDepth
+  72          // Function Description:
+  73          //
+  74          // Accepts: none
+  75          // Returns: none
+  76          // Globals: none
+  77          //------------------------------------------------------------------------------
+  78          BYTE SiI_RX_SetOutputColorDepth (BYTE bOutputColorDepth) {
+  79   1      BYTE bError = FALSE;
+  80   1      
+  81   1          switch ( bOutputColorDepth ) {
+  82   2              case SiI_RX_CD_24BPP:
+  83   2                  siiIIC_RX_RMW_ByteP0 (RX_VID_MODE2_ADDR, RX_DITHER_MODE_MASK, RX_DITHER_8BITS);
+  84   2                  break;
+  85   2              case SiI_RX_CD_30BPP:
+  86   2                  siiIIC_RX_RMW_ByteP0 (RX_VID_MODE2_ADDR, RX_DITHER_MODE_MASK, RX_DITHER_10BITS);
+  87   2                  break;
+  88   2              case SiI_RX_CD_36BPP:
+  89   2                  siiIIC_RX_RMW_ByteP0 (RX_VID_MODE2_ADDR, RX_DITHER_MODE_MASK, RX_DITHER_12BITS);
+  90   2                  break;
+  91   2              default:
+  92   2                  bError = SiI_EC_UnsupportedColorDepth;
+  93   2          }
+  94   1      
+  95   1      
+  96   1          return bError;
+  97   1      }
+  98          
+  99          //------------------------------------------------------------------------------
+ 100          // Function Name: siiSetDeepColorMode
+ 101          // Function Description: This function sets TMDS registers respecting input color color depth
+ 102          // Accepts: none
+ 103          // Returns: Error status
+ 104          // Globals: none
+ 105          //------------------------------------------------------------------------------
+ 106          
+ 107          BYTE siiSetDeepColorMode ( void ) {
+ 108   1      
+ 109   1      BYTE bColorDepth;
+ 110   1      BYTE bError = FALSE;
+ 111   1      
+ 112   1          if ( siiCheckSupportDeepColorMode ()) {
+ 113   2              // Read incoming pixel depth from latest General Control Packet
+ 114   2          bColorDepth = siiReadByteHDMIRXP0(RX_DC_STATUS_ADDR) & RX_DC_PIXELDEPTH_MASK;                         
+C51 COMPILER V9.51   SIIDEEPCOLOR                                                          05/29/2013 17:36:09 PAGE 3   
+
+             -      // Read incoming pixel depth from latest General Control Packet
+ 115   2      
+ 116   2              if ( bColorDepth != SiI_Inf.AVI.bInputColorDepth) { // If it differs from the current setting
+ 117   3      
+ 118   3              siiMuteVideo(ON);
+ 119   3      
+ 120   3              if(SiI_Ctrl.bDevId == RX_SiI9135|| SiI_Ctrl.bDevId ==  RX_SiI9125)                                
+             -                               //reset video FIFO feature only in 9135 and/or after
+ 121   3                 siiVideoFIFO_Reset();                                                                        //
+             -reset and flush    video FIFO
+ 122   3      
+ 123   3              SiI_Inf.AVI.bInputColorDepth = bColorDepth;                                                       
+             - // Update the current setting
+ 124   3      
+ 125   3              switch (bColorDepth) {                                                                            
+             -      // Update the value in hardware
+ 126   4                  case RX_DC_8BPP_VAL:
+ 127   4                      siiIIC_RX_RMW_ByteP0( RX_TMDS_ECTRL_ADDR, RX_DC_CLK_CTRL_MASK, RX_DC_CLK_8BPP_1X );
+ 128   4                      break;
+ 129   4                  case RX_DC_10BPP_VAL:
+ 130   4                      siiIIC_RX_RMW_ByteP0( RX_TMDS_ECTRL_ADDR, RX_DC_CLK_CTRL_MASK, RX_DC_CLK_10BPP_1X );
+ 131   4                      break;
+ 132   4                  case RX_DC_12BPP_VAL:
+ 133   4                      siiIIC_RX_RMW_ByteP0( RX_TMDS_ECTRL_ADDR, RX_DC_CLK_CTRL_MASK, RX_DC_CLK_12BPP_1X );
+ 134   4                      break;
+ 135   4                  default: bError = SiI_EC_UnsupportedColorDepth;
+ 136   4                  }
+ 137   3      
+ 138   3                siiMuteVideo(OFF);
+ 139   3              }
+ 140   2          }
+ 141   1        return bError;
+ 142   1      
+ 143   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    250    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       3
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

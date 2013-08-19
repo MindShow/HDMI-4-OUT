@@ -1,0 +1,1 @@
+"sii9135\UKeyboard.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\UKeyboard.lst) TABS (2) PREPRINT(.\outPut\UKeyboard.i) OBJECT(.\outPut\UKeyboard.obj)

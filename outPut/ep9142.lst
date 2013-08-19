@@ -1,0 +1,278 @@
+C51 COMPILER V9.00   EP9142                                                                07/11/2013 14:08:04 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE EP9142
+OBJECT MODULE PLACED IN .\outPut\ep9142.obj
+COMPILER INVOKED BY: D:\keil\C51\BIN\C51.EXE bsp\ep9142.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND 
+                    -PRINT(.\outPut\ep9142.lst) TABS(2) PREPRINT(.\outPut\ep9142.i) OBJECT(.\outPut\ep9142.obj)
+
+line level    source
+
+   1          //#include "ep9132_i2c.h"
+   2          //#include "intrins.h"
+   3          //#include "delay.h"
+   4          #include "reg52.h"
+   5          #include "intrins.h"
+   6          #include "typedef.h"
+   7          #include "ep9132.h"
+*** WARNING C318 IN LINE 7 OF bsp\ep9142.c: can't open file 'ep9132.h'
+   8          #include "CommonLibrary.h"
+   9          
+  10          /*ep9132 I2C Interface*/
+  11          sbit ep9132_SCL = P1^3;
+  12          sbit ep9132_SDA = P1^4;
+  13          
+  14          
+  15          /**--------------------------------------------------------------------------------
+  16          　调用方式：SomeNOP(uchar n)　﹫2010/07/15
+  17          　函数说明：IIC延时函数，I2C专用
+  18          　---------------------------------------------------------------------------------*/
+  19          void ep9132_SomeNOP(uchar n)
+  20          {
+  21   1         data uchar i;
+  22   1         for(i=0;i<n;i++)
+  23   1         {
+  24   2           _nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();
+  25   2         }
+  26   1      } 
+  27          
+  28          /**--------------------------------------------------------------------------------
+  29          　调用方式：void　I2CStart(void)　﹫2010/07/15
+  30          　函数说明：IIC启动函数，I2C专用
+  31          　---------------------------------------------------------------------------------*/
+  32          void ep9132_I2CStart(void)  
+  33          {
+  34   1        //EA=0;
+  35   1        ep9132_SDA=1; 
+  36   1        ep9132_SomeNOP(5);
+  37   1        ep9132_SCL=1;
+  38   1        ep9132_SomeNOP(5);
+  39   1        ep9132_SDA=0;
+  40   1        ep9132_SomeNOP(5);
+  41   1        ep9132_SCL=0; 
+  42   1      }
+  43          /**--------------------------------------------------------------------------------
+  44          　调用方式：void　I2CStop(void)　﹫2010/07/15
+  45          　函数说明：IIC停止函数，I2C专用
+  46          　---------------------------------------------------------------------------------*/
+  47          void ep9132_I2CStop(void)
+  48          {
+  49   1        ep9132_SDA=0; 
+  50   1        ep9132_SomeNOP(5);
+  51   1        ep9132_SCL=1;
+  52   1        ep9132_SomeNOP(5);
+  53   1        ep9132_SDA=1;
+C51 COMPILER V9.00   EP9142                                                                07/11/2013 14:08:04 PAGE 2   
+
+  54   1        ep9132_SomeNOP(5);
+  55   1        ep9132_SCL=1;
+  56   1        ep9132_SomeNOP(5);
+  57   1        //EA=1;
+  58   1        ep9132_SomeNOP(5);
+  59   1        Delay_ms(5);
+  60   1      }
+  61          
+  62          /**--------------------------------------------------------------------------------
+  63          　调用方式：bit　I2CAck(void)　﹫2010/07/15
+  64          　函数说明：IIC响应函数，I2C专用，等待从器件接收方的应答
+  65          　---------------------------------------------------------------------------------*/
+  66          bit ep9132_WaitAck(void)
+  67          {
+  68   1        data uchar errtime = 255;//因故障接收方无ACK,超时值为255
+  69   1        ep9132_SDA=1;
+  70   1        ep9132_SomeNOP(5);
+  71   1        ep9132_SCL=0;
+  72   1        ep9132_SomeNOP(5);
+  73   1        while(ep9132_SDA)
+  74   1        { errtime--;
+  75   2          if(!errtime)
+  76   2          {
+  77   3           ep9132_I2CStop();
+  78   3           //SBUF=SystemError=0x11;
+  79   3           return 0;
+  80   3          }
+  81   2        }
+  82   1        ep9132_SCL=1;
+  83   1          ep9132_SomeNOP(5);
+  84   1        //SystemError=0;
+  85   1        ep9132_SCL=0;
+  86   1        return 1;  
+  87   1      }
+  88          
+  89          /**--------------------------------------------------------------------------------
+  90          　调用方式：void　SendAck(void)　﹫2010/07/15
+  91          　函数说明：发送响应函数函数，I2C专用，主器件为接收方，从器件为发送方时，应答信号。
+  92          　---------------------------------------------------------------------------------*/
+  93          /*
+  94          void ep9132_SendAck(void)
+  95          {
+  96            ep9132_SCL=0;
+  97            ep9132_SomeNOP(4);
+  98            ep9132_SDA=0;
+  99            ep9132_SomeNOP(4);
+ 100            ep9132_SCL=1;
+ 101            ep9132_SomeNOP(4);
+ 102            ep9132_SCL=0;
+ 103            ep9132_SomeNOP(4);
+ 104          }  
+ 105          
+ 106          /**--------------------------------------------------------------------------------
+ 107          　调用方式：void　SendNotAck(void)　﹫2010/07/15
+ 108          　函数说明：发送无响应函数，I2C专用，主器件为接收方，从器件为发送方时，非应答信号。
+ 109          --------------------------------------------------------------------------------*/
+ 110          void ep9132_SendNotAck(void)
+ 111          {
+ 112   1        ep9132_SCL=0;
+ 113   1        ep9132_SomeNOP(4);
+ 114   1        ep9132_SDA=1;
+ 115   1        ep9132_SomeNOP(4);
+C51 COMPILER V9.00   EP9142                                                                07/11/2013 14:08:04 PAGE 3   
+
+ 116   1        ep9132_SCL=1;
+ 117   1        ep9132_SomeNOP(4);
+ 118   1        ep9132_SCL=0;
+ 119   1        ep9132_SomeNOP(4);
+ 120   1      }
+ 121          /**--------------------------------------------------------------------------------
+ 122          　调用方式：void　I2CSend(uchar　ch)　﹫2010/07/15
+ 123          　函数说明：IIC发送字节函数，I2C专用
+ 124          ---------------------------------------------------------------------------------*/
+ 125          void ep9132_I2CSendByte(uchar Data)
+ 126          {
+ 127   1        uchar i=8;
+ 128   1        while(i--)
+ 129   1        { 
+ 130   2        ep9132_SCL=0;
+ 131   2          ep9132_SomeNOP(1);
+ 132   2          ep9132_SDA=(bit)(Data&0x80);
+ 133   2          Data<<=1;
+ 134   2          ep9132_SomeNOP(5);
+ 135   2          ep9132_SCL=1;
+ 136   2          ep9132_SomeNOP(5);
+ 137   2          }
+ 138   1            ep9132_SCL=0;
+ 139   1      }
+ 140          
+ 141          /**--------------------------------------------------------------------------------
+ 142          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 143          　函数说明：IIC接收字节函数，I2C专用
+ 144          ---------------------------------------------------------------------------------*/
+ 145          uchar ep9132_I2CReceiveByte(void)
+ 146          {
+ 147   1        uchar i=8;
+ 148   1        uchar Data=0;
+ 149   1        ep9132_SDA=1;
+ 150   1        while(i--)
+ 151   1        {
+ 152   2          Data<<=1;
+ 153   2          ep9132_SCL=0;
+ 154   2          ep9132_SomeNOP(5);
+ 155   2          ep9132_SCL=1;
+ 156   2          ep9132_SomeNOP(5);
+ 157   2          Data|=ep9132_SDA;
+ 158   2        }
+ 159   1        ep9132_SCL=0;
+ 160   1        return Data;
+ 161   1      }
+ 162          /**--------------------------------------------------------------------------------
+ 163          　调用方式：uchar　I2CWrite1(void)　﹫2010/07/15
+ 164          　函数说明：IIC写操作函数，I2C专用
+ 165          ---------------------------------------------------------------------------------*/
+ 166          /*
+ 167          void ep9132_I2CWritep(uchar DeviceAdd,uchar PtrAdd,uchar *Data,unsigned int n)
+ 168          {
+ 169            unsigned int i=0;
+ 170            ep9132_I2CStart();
+ 171            ep9132_I2CSendByte(DeviceAdd);
+ 172              ep9132_WaitAck();
+ 173            ep9132_I2CSendByte(PtrAdd);
+ 174            ep9132_WaitAck();
+ 175            for(i=0;i<n;i++)
+ 176              {
+ 177                ep9132_I2CSendByte(*Data++);
+C51 COMPILER V9.00   EP9142                                                                07/11/2013 14:08:04 PAGE 4   
+
+ 178                  ep9132_WaitAck();
+ 179              }
+ 180            ep9132_I2CStop();
+ 181          }
+ 182          /**--------------------------------------------------------------------------------
+ 183          　调用方式：uchar　I2CWrite(void)　﹫2010/07/15
+ 184          　函数说明：IIC写操作函数，I2C专用
+ 185          ---------------------------------------------------------------------------------*/
+ 186          
+ 187          void ep9132_I2CWrite(uchar DeviceAdd,uchar PtrAdd,uchar Data)
+ 188          {
+ 189   1        ep9132_I2CStart();
+ 190   1        ep9132_I2CSendByte(DeviceAdd);
+ 191   1        ep9132_WaitAck();
+ 192   1        ep9132_I2CSendByte(PtrAdd);
+ 193   1        ep9132_WaitAck();
+ 194   1        ep9132_I2CSendByte(Data);
+ 195   1        ep9132_WaitAck();
+ 196   1        ep9132_I2CStop();
+ 197   1      }
+ 198          /**--------------------------------------------------------------------------------
+ 199          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 200          　函数说明：IIC读操作函数，I2C专用
+ 201          ---------------------------------------------------------------------------------*/
+ 202          /*
+ 203          void ep9132_I2CReadp(uchar DeviceAdd,uchar PtrAdd,uchar *Data,unsigned int n)
+ 204          {
+ 205            unsigned int i=0;
+ 206            ep9132_I2CStart();
+ 207            ep9132_I2CSendByte(DeviceAdd);
+ 208            ep9132_WaitAck();
+ 209            ep9132_I2CSendByte(PtrAdd);
+ 210            ep9132_WaitAck();
+ 211            ep9132_I2CStart();
+ 212            ep9132_I2CSendByte(DeviceAdd+1);
+ 213            ep9132_WaitAck();
+ 214            for(i=0;i<n;i++)
+ 215              {
+ 216                *Data++=ep9132_I2CReceiveByte();
+ 217                ep9132_SendAck();
+ 218              }
+ 219            *Data++=ep9132_I2CReceiveByte();
+ 220            ep9132_SendNotAck();
+ 221            ep9132_I2CStop();
+ 222          }
+ 223          /**--------------------------------------------------------------------------------
+ 224          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 225          　函数说明：IIC读操作函数，I2C专用
+ 226          ---------------------------------------------------------------------------------*/
+ 227          
+ 228          uchar ep9132_I2CRead(uchar DeviceAdd,uchar PtrAdd)
+ 229          {
+ 230   1        uchar Data;
+ 231   1        ep9132_I2CStart();
+ 232   1        ep9132_I2CSendByte(DeviceAdd);
+ 233   1        ep9132_WaitAck();
+ 234   1        ep9132_I2CSendByte(PtrAdd);
+ 235   1          ep9132_WaitAck();
+ 236   1        ep9132_I2CStart();
+ 237   1        ep9132_I2CSendByte(DeviceAdd+1);
+ 238   1        ep9132_WaitAck();
+ 239   1        Data=ep9132_I2CReceiveByte();
+C51 COMPILER V9.00   EP9142                                                                07/11/2013 14:08:04 PAGE 5   
+
+ 240   1        ep9132_SendNotAck();
+ 241   1        ep9132_I2CStop();
+ 242   1        return Data;
+ 243   1      }
+ 244          
+ 245          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    328    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       5
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

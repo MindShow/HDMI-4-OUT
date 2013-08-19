@@ -1,0 +1,172 @@
+C51 COMPILER V9.51   SIIVIDIN                                                              05/29/2013 17:36:15 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIVIDIN
+OBJECT MODULE PLACED IN .\outPut\SiIVidIn.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIVidIn.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTE
+                    -XTEND PRINT(.\outPut\SiIVidIn.lst) TABS(2) PREPRINT(.\outPut\SiIVidIn.i) OBJECT(.\outPut\SiIVidIn.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name:  VidIn
+   3          // ---
+   4          // Module Description: This module use for switchn between HDMI (DVI Inputs)
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiIGlob.h"
+  15          #include "SiIVidIn.h"
+  16          #include "SiIRXIO.h"
+  17          #include "SiITrace.h"
+  18          #include "SiIRXAPIDefs.h"
+  19          #include "SiIRXDefs.h"
+  20          #include "SiITTVideo.h"
+  21          #include "SiITTAudio.h"
+  22          #include "SiIHDCP.h"
+  23          #include "SiIHAL.h"
+  24          #include "SiIHDMIRX.h"
+  25          #include "SiISysCtrl.h"
+  26          #include "SiIAudio.h"
+  27          
+  28          //------------------------------------------------------------------------------
+  29          // Function Name: siiChangeHPD
+  30          // Function Description:  This function enables Hot Plug Detect (HPD) on Active
+  31          //                        HDMI Input and disables on passive one
+  32          //------------------------------------------------------------------------------
+  33          
+  34          static void ChangeHPD( BYTE SelectedChannel ){
+  35   1      
+  36   1          if( SelectedChannel == SiI_RX_VInCh1 ){
+  37   2              halClearHPD1Pin( );  //YMA NOTE clr P2^4
+  38   2              halSetHPD2Pin();
+  39   2            if ( SiI_Ctrl.bDevId == RX_SiI9135 || SiI_Ctrl.bDevId ==  RX_SiI9125)
+  40   2            siiSetNormalTerminationValueCh2(OFF);
+  41   2      
+  42   2          }
+  43   1          else if ( SelectedChannel == SiI_RX_VInCh2 ){
+  44   2              halClearHPD2Pin();
+  45   2              halSetHPD1Pin();
+  46   2            if ( SiI_Ctrl.bDevId == RX_SiI9135 || SiI_Ctrl.bDevId ==  RX_SiI9125)
+  47   2            siiSetNormalTerminationValueCh1(OFF);
+  48   2         }
+  49   1      
+  50   1       
+  51   1        
+  52   1      
+  53   1      }
+  54          
+C51 COMPILER V9.51   SIIVIDIN                                                              05/29/2013 17:36:15 PAGE 2   
+
+  55          
+  56          //------------------------------------------------------------------------------
+  57          // Function Name: ChangeTMDSCoreAndDDC()
+  58          // Function Description:  Function makes disable both TMDS cores and DDC,
+  59          //                        and makes enable for active Video Input Channel
+  60          //------------------------------------------------------------------------------
+  61          static BYTE ChangeTMDSCoreAndDDC( BYTE bVideoInputChannels ){
+  62   1      BYTE bECode = FALSE;
+  63   1      
+  64   1          siiIIC_RX_RWBitsInByteP0(RX_SYS_SW_SWTCHC_ADDR, ( RX_BIT_RX0_EN | RX_BIT_DDC0_EN | RX_BIT_RX1_EN | RX_
+             -BIT_DDC1_EN )
+  65   1                                                            , CLR );
+  66   1      
+  67   1          if ( bVideoInputChannels == SiI_RX_VInCh1 )
+  68   1              siiIIC_RX_RWBitsInByteP0( RX_SYS_SW_SWTCHC_ADDR, RX_BIT_RX0_EN | RX_BIT_DDC0_EN, SET );
+  69   1          else
+  70   1              siiIIC_RX_RWBitsInByteP0( RX_SYS_SW_SWTCHC_ADDR, RX_BIT_RX1_EN | RX_BIT_DDC1_EN, SET);
+  71   1      
+  72   1          return bECode;
+  73   1      }
+  74          //------------------------------------------------------------------------------
+  75          // Function Name: siiSetVideoInput
+  76          // Function Description:  This function is used to Select new HDMI Input
+  77          //
+  78          // Accepts: bVideoInputChannel
+  79          // Returns: none
+  80          // Globals: none
+  81          //------------------------------------------------------------------------------
+  82          void siiSetVideoInput( BYTE bVideoInputChannel ) {
+  83   1      
+  84   1      
+  85   1          siiMuteVideoAndSetSM_SyncInChange();
+  86   1      
+  87   1          siiReInitRX();
+  88   1      
+  89   1          ChangeTMDSCoreAndDDC( bVideoInputChannel );    // re-init RX
+  90   1      
+  91   1          ChangeHPD( bVideoInputChannel );
+  92   1          SiI_Ctrl.bVidInChannel = bVideoInputChannel;
+  93   1          ReqReAuthenticationRX();  // Clearing Ri will be notification for host to start
+  94   1      }
+  95          
+  96          //------------------------------------------------------------------------------
+  97          // Function Name: siiInitVideoInput
+  98          // Function Description:  This function is used to Select new HDMI Input
+  99          //
+ 100          // Accepts: bVideoInputChannel
+ 101          // Returns: none
+ 102          // Globals: none
+ 103          //------------------------------------------------------------------------------
+ 104          BYTE siiInitVideoInput( BYTE bVideoInputChannel ) {
+ 105   1      
+ 106   1      
+ 107   1          ChangeTMDSCoreAndDDC( bVideoInputChannel );    // re-init RX
+ 108   1      
+ 109   1          ChangeHPD( bVideoInputChannel );
+ 110   1          SiI_Ctrl.bVidInChannel = bVideoInputChannel;
+ 111   1          ReqReAuthenticationRX();  // Clearing Ri will be notification for host to start
+ 112   1      
+ 113   1          return siiGetErrorsWarnings();
+ 114   1      }
+ 115          
+C51 COMPILER V9.51   SIIVIDIN                                                              05/29/2013 17:36:15 PAGE 3   
+
+ 116          //------------------------------------------------------------------------------
+ 117          // Function Name: siiChangeVideoInput
+ 118          // Function Description:
+ 119          //
+ 120          // Accepts: bVideoInputChannel
+ 121          // Returns: none
+ 122          // Globals: none
+ 123          //------------------------------------------------------------------------------
+ 124          void siiChangeVideoInput( BYTE bVideoInputChannel ){
+ 125   1      
+ 126   1      
+ 127   1          if ( ( SiI_Ctrl.bDevId ==  RX_SiI9011 ) && ( bVideoInputChannel != SiI_RX_VInCh1) ) {
+ 128   2              siiWarningHandler( SiI_WC_ChipNoCap );
+ 129   2          }
+ 130   1          else {
+ 131   2      
+ 132   2              //SiI_Ctrl.bVidInChannel = bVideoInputChannel; //YMA set already
+ 133   2              if ( siiIsVideoOn() && ( SiI_Inf.bGlobStatus & SiI_RX_GlobalHDMI_Detected ) ) {
+ 134   3                  siiSetSM_ReqVidInChange();  // Gives time for Audio soft muting
+ 135   3                  siiSetAudioMuteEvent();
+ 136   3              }
+ 137   2              else {
+ 138   3                  siiSetVideoInput( SiI_Ctrl.bVidInChannel );
+ 139   3              }
+ 140   2          }
+ 141   1      
+ 142   1      }
+ 143          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    216    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       5
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

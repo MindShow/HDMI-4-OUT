@@ -1,0 +1,71 @@
+C51 COMPILER V9.51   SIIHDCP                                                               05/29/2013 17:36:10 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIHDCP
+OBJECT MODULE PLACED IN .\outPut\SiIHDCP.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIHDCP.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEX
+                    -TEND PRINT(.\outPut\SiIHDCP.lst) TABS(2) PREPRINT(.\outPut\SiIHDCP.i) OBJECT(.\outPut\SiIHDCP.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name SiIHDCP
+   3          // Module Description:  HDCP functions
+   4          //
+   5          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   6          //
+   7          // No part of this work may be reproduced, modified, distributed, transmitted,
+   8          // transcribed, or translated into any language or computer format, in any form
+   9          // or by any means without written permission of: Silicon Image, Inc.,
+  10          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  11          //------------------------------------------------------------------------------
+  12          
+  13          #include "SiIHDCP.h"
+  14          #include "SiIRXIO.h"
+  15          #include "SiIRXDefs.h"
+  16          #include "SiIRXAPIDefs.h"
+  17          //------------------------------------------------------------------------------
+  18          // Function Name: ReqReAuthenticationRX
+  19          // Function Description: clears Ri, used to notify upstream about HDCP failure
+  20          //
+  21          // Accepts: none
+  22          // Returns: none
+  23          // Globals: none
+  24          //------------------------------------------------------------------------------
+  25          void ReqReAuthenticationRX( void ){
+  26   1      
+  27   1          siiIIC_RX_RWBitsInByteP0( RX_HDCP_CTRL_ADDR, RX_BIT_TRASH_RI, SET );
+  28   1          // this bit will be cleared automaticly on authentication event
+  29   1      
+  30   1      }
+  31          //------------------------------------------------------------------------------
+  32          // Function Name: siiCheckHDCPDecrypting
+  33          // Function Description: checks if HDMI has been decrypted  (used by HDCP)
+  34          // Accepts: none
+  35          // Returns: none
+  36          // Globals: none
+  37          //------------------------------------------------------------------------------
+  38          BOOL siiCheckHDCPDecrypting( void ){
+  39   1      BOOL qResult = FALSE;
+  40   1      
+  41   1          if ( siiReadByteHDMIRXP0( RX_HDCP_STAT_ADDR ) & RX_BIT_HDCP_DECRYPTING )
+  42   1              qResult = TRUE;
+  43   1          return  qResult;
+  44   1      }
+  45          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     29    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+C51 COMPILER V9.51   SIIHDCP                                                               05/29/2013 17:36:10 PAGE 2   
+
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

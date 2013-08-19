@@ -1,0 +1,1 @@
+"sii9135\SiISysCtrl.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\SiISysCtrl.lst) TABS (2) PREPRINT(.\outPut\SiISysCtrl.i) OBJECT(.\outPut\SiISysCtrl.obj)

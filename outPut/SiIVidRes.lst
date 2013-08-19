@@ -1,0 +1,673 @@
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIVIDRES
+OBJECT MODULE PLACED IN .\outPut\SiIVidRes.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIVidRes.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECT
+                    -EXTEND PRINT(.\outPut\SiIVidRes.lst) TABS(2) PREPRINT(.\outPut\SiIVidRes.i) OBJECT(.\outPut\SiIVidRes.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiI Video Resolution
+   3          // ---
+   4          // Module Description: Here are video resolution related functions
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiIHAL.h"
+  15          #include "SiIInfoPkts.h"
+  16          #include "SiIVidRes.h"
+  17          #include "SiIVidF.h"
+  18          #include "SiIGlob.h"
+  19          #include "SiIRXDefs.h"
+  20          #include "SiIRXIO.h"
+  21          #include "SiITrace.h"
+  22          #include "SiIDeepColor.h"
+  23          
+  24          #ifdef SII_DUMP_UART
+  25          #include <stdio.h>
+  26          #endif
+  27          
+  28          //------------------------------------------------------------------------------
+  29          // Function Name: abs_diff
+  30          // Function Description: calculates diffrence between two parameters
+  31          //------------------------------------------------------------------------------
+  32          static WORD abs_diff (WORD A, WORD B){
+  33   1      WORD Result;
+  34   1      
+  35   1          if(A > B)
+  36   1              Result = A - B;
+  37   1          else
+  38   1              Result = B - A;
+  39   1          return Result;
+  40   1      
+  41   1      }
+  42          //------------------------------------------------------------------------------
+  43          // Function Name: siiGetPixClockFromTables
+  44          // Function Description: Takes Pixel clock from Video Resolution tables
+  45          //
+  46          // Accepts: bIndex
+  47          // Returns: none
+  48          // Globals: byte, Pixel Clock
+  49          //------------------------------------------------------------------------------
+  50          BYTE siiGetPixClockFromTables( BYTE bIndex ){
+  51   1          return VModeTables[ bIndex ].PixClk;
+  52   1      }
+  53          //------------------------------------------------------------------------------
+  54          // Function Name: siiCheckSyncDetect
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 2   
+
+  55          // Function Description:  checks Sync Detect ( asserted when cirtain number of DE counted )
+  56          //------------------------------------------------------------------------------
+  57          BOOL siiCheckSyncDetect( void ){
+  58   1      BOOL qResult = FALSE;
+  59   1          if ( siiReadByteHDMIRXP0( RX_STATE_ADDR ) & RX_BIT_SCDT )
+  60   1              qResult = TRUE;
+  61   1          return  qResult;
+  62   1      }
+  63          //------------------------------------------------------------------------------
+  64          // Function Name: siiCheckClockDetect
+  65          // Function Description:  checks Clock Detect
+  66          //------------------------------------------------------------------------------
+  67          BOOL siiCheckClockDetect( void ){
+  68   1      BOOL qResult = FALSE;
+  69   1          if ( siiReadByteHDMIRXP0( RX_STATE_ADDR ) & RX_BIT_CLK )
+  70   1              qResult = TRUE;
+  71   1          return  qResult;
+  72   1      }
+  73          //------------------------------------------------------------------------------
+  74          // Function Name: GetVSyncFreq
+  75          // Function Description: this function culculates Vertical Sync Frequency
+  76          //------------------------------------------------------------------------------
+  77          static WORD GetVSyncFreq( WORD wHtot, WORD wVtot ){
+  78   1      BYTE i;
+  79   1      WORD wXClks = 0;
+  80   1      DWORD dwXclksPerFrame;
+  81   1      WORD wVFreq;
+  82   1      
+  83   1      
+  84   1      //
+  85   1      // FrameXClk = (( Htot * Vtot)* (AVR of 8 Reg128XClk ))/1128
+  86   1      //
+  87   1          if ( ( SiI_Ctrl.bDevId == RX_SiI9133 ) ||( SiI_Ctrl.bDevId == RX_SiI9135 || SiI_Ctrl.bDevId ==  RX_SiI
+             -9125) || ( SiI_Ctrl.bDevId == RX_SiIIP11 ) ) {
+  88   2              for (  i = 0; i < 8; i++ ) {
+  89   3                  wXClks += GetXClockW(); // by doing this we will get average XClk
+  90   3              }
+  91   2              SiI_Inf.Sync.bFPix = (BYTE)( (WORD) ( SII_XCLOCK_OSC_SCALED2047_FOR_CALK_FPIX / wXClks ) );
+  92   2          }
+  93   1          else {
+  94   2              for (  i = 0; i < 8; i++ ) {
+  95   3                  wXClks += GetXClock(); // by doing this we will get average XClk
+  96   3              }
+  97   2              SiI_Inf.Sync.bFPix = (BYTE)( (WORD) ( SII_XCLOCK_OSC_SCALED_FOR_CALK_FPIX / wXClks ) );
+  98   2          }
+  99   1      
+ 100   1          dwXclksPerFrame = (DWORD)wHtot * (DWORD)wVtot;
+ 101   1      
+ 102   1          if ( ( SiI_Ctrl.bDevId == RX_SiI9133 ) ||( SiI_Ctrl.bDevId == RX_SiI9135|| SiI_Ctrl.bDevId ==  RX_SiI9
+             -125) || ( SiI_Ctrl.bDevId == RX_SiIIP11 ) ) {
+ 103   2            dwXclksPerFrame *= (DWORD) (wXClks >> 3);
+ 104   2              dwXclksPerFrame >>= 11; // div ( 8 * 2048 )
+ 105   2              wVFreq = (WORD)( SII_XCLOCK_OSC_SCALED2047_AND_MUL100 / dwXclksPerFrame );
+ 106   2              }
+ 107   1          else {
+ 108   2            dwXclksPerFrame *= (DWORD)wXClks;
+ 109   2              dwXclksPerFrame >>= 10; // div ( 8 * 128 )
+ 110   2              wVFreq = (WORD)( SII_XCLOCK_OSC_SCALED_AND_MUL100 / dwXclksPerFrame );
+ 111   2              }
+ 112   1      
+ 113   1          return wVFreq;
+ 114   1      }
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 3   
+
+ 115          
+ 116          //------------------------------------------------------------------------------
+ 117          // Function Name: siiGetSyncInfo()
+ 118          // Function Description: is used to get H/V Sync and polarity information
+ 119          //------------------------------------------------------------------------------
+ 120          void siiGetSyncInfo( SyncInfoType * SyncInfo ){
+ 121   1      BYTE abData[4];
+ 122   1      
+ 123   1          siiReadBlockHDMIRXP0( RX_HRES_L_ADDR, 4, abData );
+ 124   1      
+ 125   1          SyncInfo->ClocksPerLine = abData[0] | ( abData[1] << 8);
+ 126   1          SyncInfo->HTot = abData[2] | ( abData[3] << 8);
+ 127   1          if ( SiI_Ctrl.bShadowPixRepl  == 0x01 )
+ 128   1              SyncInfo->ClocksPerLine <<= 1;           // pixel replicated by 2 clocks
+ 129   1          else if ( SiI_Ctrl.bShadowPixRepl  == 0x02 )
+ 130   1                  SyncInfo->ClocksPerLine *= 3;        // pixel replicated by 3 clocks
+ 131   1          else if ( SiI_Ctrl.bShadowPixRepl  == 0x03 )
+ 132   1              SyncInfo->ClocksPerLine <<= 2;           // pixel replicated by 4 clocks
+ 133   1          SyncInfo->VFreq = GetVSyncFreq( SyncInfo->ClocksPerLine, SyncInfo->HTot );
+ 134   1          SyncInfo->RefrTypeVHPol  = GetRefrTypeHVPol( );
+ 135   1      
+ 136   1      }
+ 137          //------------------------------------------------------------------------------
+ 138          // Function Name: CompareWithVMTableRef()
+ 139          // Function Description:  Compare timing inform with an entry of video
+ 140          //                        mode reference table
+ 141          //------------------------------------------------------------------------------
+ 142          static BYTE CompareWithVMTableRef( BYTE Index, SyncInfoType * SyncInform ){
+ 143   1      BOOL qResult = FALSE;
+ 144   1      
+ 145   1          if ( VModeTables[Index].Tag.RefrTypeVHPol == SyncInform->RefrTypeVHPol )
+ 146   1              if ( abs_diff(VModeTables[Index].Tag.VFreq, SyncInform->VFreq ) < V_TOLERANCE )
+ 147   1                  if ( abs_diff(VModeTables[Index].Tag.Total.Lines, SyncInform->HTot) < LINES_TOLERANCE )
+ 148   1                      if ( abs_diff(VModeTables[Index].Tag.Total.Pixels, SyncInform->ClocksPerLine) < PIXELS_TOL
+             -ERANCE )
+ 149   1                          qResult = TRUE;
+ 150   1          return qResult;
+ 151   1      
+ 152   1      }
+ 153          //------------------------------------------------------------------------------
+ 154          // Function Name:  ompareWithVMTableRefIgnorPol()
+ 155          // Function Description:  Compare timing inform with an entry of video
+ 156          //                        mode reference table, but polarity information is ignored
+ 157          //------------------------------------------------------------------------------
+ 158          static BYTE CompareWithVMTableRefIgnorPol( BYTE Index, SyncInfoType * SyncInform){
+ 159   1      BOOL qResult = FALSE;
+ 160   1      
+ 161   1          if ( (VModeTables[Index].Tag.RefrTypeVHPol & INTERLACE_MASK )==(SyncInform->RefrTypeVHPol & INTERLACE_
+             -MASK) )
+ 162   1              if ( abs_diff( VModeTables[Index].Tag.VFreq, SyncInform->VFreq ) <  V_TOLERANCE )
+ 163   1                  if ( abs_diff( VModeTables[Index].Tag.Total.Lines, SyncInform->HTot) < LINES_TOLERANCE )
+ 164   1                      if ( abs_diff( VModeTables[Index].Tag.Total.Pixels, SyncInform->ClocksPerLine) < PIXELS_TO
+             -LERANCE )
+ 165   1                          qResult = TRUE;
+ 166   1          return qResult;
+ 167   1      
+ 168   1      }
+ 169          //------------------------------------------------------------------------------
+ 170          // Function Name: siiVideoModeDetection
+ 171          // Function Description: This function used for search video resolution modes through
+ 172          //                       reference tables
+ 173          //------------------------------------------------------------------------------
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 4   
+
+ 174          
+ 175          //    This function used for search video modes
+ 176          BYTE siiVideoModeDetection( BYTE * pbIndex, SyncInfoType * SyncInf){
+ 177   1      BYTE bResult = FALSE;
+ 178   1      
+ 179   1          for((*pbIndex) = 0; (*pbIndex) < NMODES; (*pbIndex)++){
+ 180   2              if(CompareWithVMTableRef(*pbIndex, SyncInf)){
+ 181   3                  bResult  = 1;
+ 182   3                  break;
+ 183   3              }
+ 184   2          }
+ 185   1          if((*pbIndex) == NMODES){
+ 186   2              //Preset mode not found, search ignoring polarity then:
+ 187   2              for((*pbIndex) = 0; ( *pbIndex ) < NMODES; (*pbIndex)++) {
+ 188   3                  if(CompareWithVMTableRefIgnorPol( *pbIndex, SyncInf)) {
+ 189   4                      bResult  = 2;
+ 190   4                      break;
+ 191   4                  }
+ 192   3              }
+ 193   2        }
+ 194   1        return bResult;
+ 195   1      }
+ 196          
+ 197          //------------------------------------------------------------------------------
+ 198          // Function Name: CheckOutOfRangeConditions
+ 199          // Function Description: This function is used to detect of sync data overrange conditions
+ 200          //------------------------------------------------------------------------------
+ 201          
+ 202          BOOL siiCheckOutOfRangeConditions( SyncInfoType * SyncInfo )
+ 203          {
+ 204   1      WORD wHFreq;
+ 205   1      BOOL qOutOfRangeF = TRUE;
+ 206   1      
+ 207   1          wHFreq = (WORD) ( ( (DWORD) SyncInfo->VFreq * SyncInfo->HTot)/1000);
+ 208   1          if ( SyncInfo->RefrTypeVHPol & INTERLACE_MASK ) { // Interlace Video Mode
+ 209   2              if ( ( wHFreq < INTERLACE_HFREQ_HIGH_LIMIT)&&(wHFreq > INTERLACE_HFREQ_LOW_LIMIT))
+ 210   2                  if ( ( SyncInfo->VFreq < INTERLACE_VFREQ_HIGH_LIMIT)&&(SyncInfo->VFreq > INTERLACE_VFREQ_LOW_L
+             -IMIT)){
+ 211   3                      qOutOfRangeF = FALSE;  // sync in range
+ 212   3                  }
+ 213   2      #ifdef SII_DUMP_UART
+ 214   2                   printf("\n--HFreq = %i VFreq = %i ScanPol=%02X--\n", wHFreq, SyncInfo->VFreq, (int)SyncInfo->
+             -RefrTypeVHPol);
+ 215   2      #endif
+ 216   2      
+ 217   2          }
+ 218   1          else {                                                  // Progressive Video Mode
+ 219   2              if ( (wHFreq < PROGRESSIVE_HFREQ_HIGH_LIMIT)&&(wHFreq > PROGRESSIVE_HFREQ_LOW_LIMIT)){
+ 220   3                  if ( (SyncInfo->VFreq < PROGRESSIVE_VFREQ_HIGH_LIMIT)&&(SyncInfo->VFreq > PROGRESSIVE_VFREQ_LO
+             -W_LIMIT)){
+ 221   4                   qOutOfRangeF = FALSE;  // sync in range
+ 222   4                  }
+ 223   3      #ifdef SII_DUMP_UART
+ 224   3                   printf("\n--HFreq = %i VFreq = %i ScanPol=%02X--\n", wHFreq, SyncInfo->VFreq, (int)SyncInfo->
+             -RefrTypeVHPol);
+ 225   3      #endif
+ 226   3              }
+ 227   2          }
+ 228   1          return qOutOfRangeF;
+ 229   1      }
+ 230          //------------------------------------------------------------------------------
+ 231          // Function Name: GetColorimetryFormVidRes
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 5   
+
+ 232          // Function Description: this function gets Colorimetry information from video input resolution
+ 233          //------------------------------------------------------------------------------
+ 234          
+ 235          static BYTE GetColorimetryFormVidRes( BYTE bVidResId ){
+ 236   1      BYTE bColorimetry;
+ 237   1      
+ 238   1          bColorimetry = SiI_RX_ITU_601;
+ 239   1          if( VModeTables[bVidResId].Res.V >= 720 )
+ 240   1              bColorimetry = SiI_RX_ITU_709;
+ 241   1          return bColorimetry;
+ 242   1      }
+ 243          //------------------------------------------------------------------------------
+ 244          // Function Name: siiGetPixReplicationFormVidRes
+ 245          // Function Description: this function gets Pixel Replication Rate from entry of detected video
+ 246          //                       resolution
+ 247          //------------------------------------------------------------------------------
+ 248          static BYTE siiGetPixReplicationFormVidRes( BYTE VidResId ){
+ 249   1      
+ 250   1          return VModeTables[VidResId].PixRepl;
+ 251   1      }
+ 252          //------------------------------------------------------------------------------
+ 253          // Function Name: siiGetPixReplicationFormVidRes
+ 254          // Function Description: this function gets Pixel Replication Rate from entry of detected video
+ 255          //                       resolution
+ 256          //------------------------------------------------------------------------------
+ 257          static BYTE siiIsInterlaceMode( BYTE VidResId ){
+ 258   1      
+ 259   1          return ( VModeTables[VidResId].Tag.RefrTypeVHPol & SiI_InterlaceMask );
+ 260   1      }
+ 261          //------------------------------------------------------------------------------
+ 262          // Function Name: siiSetVideoBlankLevel()
+ 263          // Function Description: this function restores blank level which dependes on
+ 264          //                       Input Color Space and Input Video resolution
+ 265          //------------------------------------------------------------------------------
+ 266          
+ 267          static BYTE SetVideoBlankLevel( BYTE bVidResId ){
+ 268   1      BYTE bEWCode = FALSE;
+ 269   1      
+ 270   1      BYTE bBlankDataCh[3];
+ 271   1      
+ 272   1          bBlankDataCh[0] = 0;     // blank levels for PC modes
+ 273   1          bBlankDataCh[1] = 0;
+ 274   1          bBlankDataCh[2] = 0;
+ 275   1      
+ 276   1          if ( SiI_Inf.AVI.bInputColorSpace == SiI_RX_ICP_RGB ) {
+ 277   2              if ( ( bVidResId < PC_BASE) && ( bVidResId != VGA ) ){    // RGB CE
+ 278   3                  bBlankDataCh[0] = 0x10;
+ 279   3                  bBlankDataCh[1] = 0x10;
+ 280   3                  bBlankDataCh[2] = 0x10;
+ 281   3              }
+ 282   2          }
+ 283   1          else if ( SiI_Inf.AVI.bInputColorSpace == SiI_RX_ICP_YCbCr444 ) { // YCbCr 4:4:4
+ 284   2              bBlankDataCh[0] = 0x80;
+ 285   2              bBlankDataCh[1] = 0x10;
+ 286   2              bBlankDataCh[2] = 0x80;
+ 287   2          }
+ 288   1          else if (SiI_Inf.AVI.bInputColorSpace == SiI_RX_ICP_YCbCr422) {   // YCbCr 4:2:2
+ 289   2              bBlankDataCh[0] = 0x00;
+ 290   2              bBlankDataCh[1] = 0x10;
+ 291   2              bBlankDataCh[2] = 0x80;
+ 292   2          }
+ 293   1          else
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 6   
+
+ 294   1              bEWCode = SiI_EC_InColorSpace;
+ 295   1      
+ 296   1          siiWriteBlockHDMIRXP0( RX_BLANKDATA_CH0_ADDR, 3, bBlankDataCh );
+ 297   1          siiWarningHandler( bEWCode );
+ 298   1          return bEWCode;
+ 299   1      
+ 300   1      }
+ 301          //------------------------------------------------------------------------------
+ 302          // Function Name:  siiSetOutputVideoFilter
+ 303          // Function Description: this function selects type of Output Video Filter
+ 304          //                       which depends from Video Resolution
+ 305          //------------------------------------------------------------------------------
+ 306          #ifdef _OUTPUT_VFILTER_
+              // TThis function controlls extrnal Video Filter, if it present
+              
+              static BYTE SetOutputVideoFilter( BYTE bVidResId ){
+              BYTE bEWCode = FALSE;
+              
+                  bVidResId = 0;
+                  SiI_Inf.Sync
+                  return bEWCode;
+              }
+              #endif // _OUTPUT_VFILTER_
+ 317          //------------------------------------------------------------------------------
+ 318          // Function Name: CompareNewOldSync()
+ 319          // Function Description:  This function is used to detect that resolution has stated to change
+ 320          //------------------------------------------------------------------------------
+ 321          BOOL siiCompareNewOldSync(SyncInfoType * OldSyncInfo, SyncInfoType * NewSyncInfo ) {
+ 322   1      BOOL qResult = FALSE;
+ 323   1      
+ 324   1        if ( ( abs_diff(OldSyncInfo->HTot, NewSyncInfo->HTot) <= LINES_TOLERANCE) &&
+ 325   1             ( abs_diff(OldSyncInfo->ClocksPerLine, NewSyncInfo->ClocksPerLine) <= PIXELS_TOLERANCE) ){
+ 326   2            qResult = TRUE;
+ 327   2        }
+ 328   1      
+ 329   1      #ifdef SII_DUMP_UART
+ 330   1        if ( !qResult ) {
+ 331   2            printf("\n--Old HTot= %i ClocksPerLine = %i ", OldSyncInfo->HTot , OldSyncInfo->ClocksPerLine );
+ 332   2            printf("\n--New HTot= %i ClocksPerLine = %i \n", NewSyncInfo->HTot, NewSyncInfo->ClocksPerLine );
+ 333   2        }
+ 334   1      #endif
+ 335   1        return qResult;
+ 336   1      }
+ 337          //------------------------------------------------------------------------------
+ 338          // Function Name: ConfigInterlaceCSync( )
+ 339          // Function Description: Sets parameters which used for generation Composite sync for
+ 340          //                       particular Interlace Modes
+ 341          //------------------------------------------------------------------------------
+ 342          
+ 343          static void ConfigInterlaceCSync( BYTE bVidResId ){
+ 344   1      
+ 345   1          siiWriteWordHDMIRXP0( RX_CAPHALFLINE_ADDR,InterlaceCSync[ bVidResId ].CapHalfLineCnt);
+ 346   1          siiWriteWordHDMIRXP0( RX_PREEQPULSCNT_ADDR,InterlaceCSync[ bVidResId ].PreEqPulseCnt);
+ 347   1          siiWriteWordHDMIRXP0( RX_SERRATEDCNT_ADDR,InterlaceCSync[ bVidResId ].SerratedCnt);
+ 348   1          siiWriteWordHDMIRXP0( RX_POSTEQPULSECNT_ADDR,InterlaceCSync[ bVidResId ].PostEqPulseCnt);
+ 349   1      
+ 350   1      }
+ 351          //------------------------------------------------------------------------------
+ 352          // Function Name: siiConfigureSyncOnYForInretlaceModes()
+ 353          // Function Description: this functio is used to select which table should be used
+ 354          //                       for generation of Sync for Interlace Modes
+ 355          //------------------------------------------------------------------------------
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 7   
+
+ 356          
+ 357          static void ConfigureSyncOnYForInretlaceModes( BYTE bVidResId ){
+ 358   1      
+ 359   1      
+ 360   1            if ( VModeTables[ bVidResId ].Res.V == 480 ){
+ 361   2                ConfigInterlaceCSync( 0 );
+ 362   2            }
+ 363   1            else if ( VModeTables[ bVidResId ].Res.V == 576 ){
+ 364   2                ConfigInterlaceCSync( 1 );
+ 365   2            }
+ 366   1            else if ( VModeTables[ bVidResId ].Res.V == 1080 ){
+ 367   2                ConfigInterlaceCSync( 2 );
+ 368   2            }
+ 369   1            else {
+ 370   2      #ifdef SII_DUMP_UART
+ 371   2                printf("Interlace Output is not supported\n");
+ 372   2      #endif
+ 373   2            }
+ 374   1      
+ 375   1      }
+ 376          //------------------------------------------------------------------------------
+ 377          // Function Name:           siiSetColorimetry()
+ 378          // Function Description:    sets colorimetry formula whith used with color space
+ 379          //                          converter (BT601 vs. BT709)
+ 380          //------------------------------------------------------------------------------
+ 381          static BYTE SetColorimetry( BYTE bColorimetry ){
+ 382   1      BYTE bEWCode = FALSE;
+ 383   1      
+ 384   1          if ( bColorimetry == SiI_RX_ITU_601 )
+ 385   1              siiIIC_RX_RWBitsInByteP0( RX_VID_CTRL_ADDR, RX_BIT_BT709_RGBCONV | RX_BIT_BT709_YCbCrCONV, CLR );
+ 386   1          else if( bColorimetry == SiI_RX_ITU_709 )
+ 387   1              siiIIC_RX_RWBitsInByteP0( RX_VID_CTRL_ADDR, RX_BIT_BT709_RGBCONV | RX_BIT_BT709_YCbCrCONV, SET );
+ 388   1          else {
+ 389   2              bEWCode = SiI_WC_Colorimetry;
+ 390   2          }
+ 391   1          return bEWCode;
+ 392   1      }
+ 393          //------------------------------------------------------------------------------
+ 394          // Function Name: siiGetVideoResId
+ 395          // Function Description: provides short resolution info for user layer
+ 396          //------------------------------------------------------------------------------
+ 397          BYTE siiGetVideoResId ( BYTE bVidResIndex ) {
+ 398   1      BYTE bVideoResId;
+ 399   1      BYTE bVIC;
+ 400   1      
+ 401   1          if ( bVidResIndex < PC_BASE ) {
+ 402   2              bVideoResId = VModeTables[ bVidResIndex ].ModeId.Mode_C1;
+ 403   2      
+ 404   2              if ( VModeTables[ bVidResIndex ].ModeId.Mode_C2 ){
+ 405   3      
+ 406   3                  if ( SiI_Inf.AVI.bAVI_State == SiI_RX_GotAVI ) {
+ 407   4                      bVIC = siiGetVIC(); // get Video Id Code form Info Frame Packet
+ 408   4                      if( ( bVIC == bVideoResId ) || ( bVIC == bVideoResId + 1) )
+ 409   4                          bVideoResId = bVIC;
+ 410   4                      else
+ 411   4                          bVideoResId |= SiI_CE_orNextRes;
+ 412   4                  }
+ 413   3                  else
+ 414   3                      bVideoResId |= SiI_CE_orNextRes;
+ 415   3              }
+ 416   2              bVideoResId |= SiI_CE_Res;
+ 417   2          }
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 8   
+
+ 418   1          else {
+ 419   2              bVideoResId = bVidResIndex - PC_BASE;
+ 420   2          }
+ 421   1          return bVideoResId;
+ 422   1      
+ 423   1      }
+ 424          
+ 425          //------------------------------------------------------------------------------
+ 426          // Function Name: ConvertInterlaceFieldsIntoFrames
+ 427          // Function Description:
+ 428          //------------------------------------------------------------------------------
+ 429          static WORD ConvNLinesInFieldIntoNLinesInFrame( WORD bLines ){
+ 430   1      
+ 431   1          if ( SiI_Inf.Sync.RefrTypeVHPol & INTERLACE_MASK ){
+ 432   2              if ( bLines & 0x0001 ) // if odd
+ 433   2                  bLines += bLines;
+ 434   2              else
+ 435   2                  bLines += ( bLines + 1 );         // calculate total number of lines in frame
+ 436   2          }
+ 437   1          return bLines;
+ 438   1      }
+ 439          //------------------------------------------------------------------------------
+ 440          // Function Name: ConvertClocksToPixels
+ 441          // Function Description: For pixel replicated modes it's need to convert clocks to pixels
+ 442          //                       for not replicated modes clocks equal to pixels
+ 443          //------------------------------------------------------------------------------
+ 444          static void ConvertClocksToPixels ( WORD * wpPixClocks ) {
+ 445   1          if ( SiI_Ctrl.bShadowPixRepl == 0x01 )
+ 446   1              * wpPixClocks >>= 1;
+ 447   1          else if ( SiI_Ctrl.bShadowPixRepl == 0x02 )
+ 448   1              * wpPixClocks /= 3;
+ 449   1          else if ( SiI_Ctrl.bShadowPixRepl == 0x03 )
+ 450   1              * wpPixClocks >>= 2;
+ 451   1      }
+ 452          
+ 453          #ifdef SII_NO_RESOLUTION_DETECTION
+ 454          
+ 455          //------------------------------------------------------------------------------
+ 456          // Function Name: siiGetVideoInputResolutionFromRegisters
+ 457          // Function Description:  Using this function use gets extended
+ 458          //                        information about detected video resolution
+ 459          // Accepts: BYTE, resolution index in table
+ 460          // Returns: BYTE *, pointer on resolution data
+ 461          // Globals: none
+ 462          //------------------------------------------------------------------------------
+ 463          void siiGetVideoInputResolutionromRegisters( BYTE * pbVideoResInfo ){
+ 464   1      WORD wAux;
+ 465   1      BYTE abData[4];
+ 466   1      
+ 467   1          pbVideoResInfo[ 0 ] = SiI_ResNotDetected;
+ 468   1          pbVideoResInfo[ 1 ] = ( SiI_Inf.AVI.bPixRepl  << 4 ); //added for new API
+ 469   1          pbVideoResInfo[ 1 ] |= SiI_Inf.Sync.RefrTypeVHPol;
+ 470   1          pbVideoResInfo[ 2 ] = SiI_Inf.Sync.bFPix;//GetFPixClock();
+ 471   1          pbVideoResInfo[ 3 ] = (BYTE) ( SiI_Inf.Sync.VFreq  & 0x00FF );
+ 472   1          pbVideoResInfo[ 4 ] = (BYTE) ( SiI_Inf.Sync.VFreq >> 8 );
+ 473   1      
+ 474   1          siiReadBlockHDMIRXP0( RX_RES_ACTIVE_ADDR, 4, abData );
+ 475   1      
+ 476   1          wAux = abData[0] | ( abData[1] << 8);
+ 477   1          ConvertClocksToPixels ( &wAux );
+ 478   1          pbVideoResInfo[ 5 ] = (BYTE) ( wAux  & 0x00FF);
+ 479   1          pbVideoResInfo[ 6 ] = (BYTE) ( ( wAux >> 8 ) & 0x000F );
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 9   
+
+ 480   1      
+ 481   1      
+ 482   1          wAux = ConvNLinesInFieldIntoNLinesInFrame ( abData[ 2 ] | ( abData[ 3 ] << 8) );
+ 483   1      
+ 484   1          pbVideoResInfo[ 7 ] = (BYTE) ( wAux  & 0x00FF);
+ 485   1          pbVideoResInfo[ 8 ] = (BYTE) ( ( wAux >> 8 ) & 0x000F );
+ 486   1      
+ 487   1          wAux = SiI_Inf.Sync.ClocksPerLine;
+ 488   1          ConvertClocksToPixels ( &wAux );
+ 489   1          pbVideoResInfo[ 9 ] = (BYTE) ( wAux  & 0x00FF);
+ 490   1          pbVideoResInfo[ 10 ] = (BYTE) ( ( wAux >> 8 ) & 0x000F );
+ 491   1      
+ 492   1          wAux = ConvNLinesInFieldIntoNLinesInFrame ( SiI_Inf.Sync.HTot );
+ 493   1      
+ 494   1          pbVideoResInfo[ 11 ] = (BYTE) ( wAux  & 0x00FF);
+ 495   1          pbVideoResInfo[ 12 ] = (BYTE) ( ( wAux >> 8 ) & 0x000F );
+ 496   1      
+ 497   1      
+ 498   1      
+ 499   1      }
+ 500          #endif
+ 501          //------------------------------------------------------------------------------
+ 502          // Function Name: siiGetVideoInputResolution
+ 503          // Function Description:  Using this function use gets extended
+ 504          //                        information about detected video resolution
+ 505          // Accepts: BYTE, resolution index in table
+ 506          // Returns: BYTE *, pointer on resolution data
+ 507          // Globals: none
+ 508          //------------------------------------------------------------------------------
+ 509          void siiGetVideoInputResolution( BYTE bVidResIndex, BYTE * pbVideoResInfo ){
+ 510   1      WORD wAux;
+ 511   1      
+ 512   1          pbVideoResInfo[ 0 ] = siiGetVideoResId( bVidResIndex );
+ 513   1      //    pbVideoResInfo[ 1 ] = SiI_Inf.Sync.RefrTypeVHPol;  //YMA changed to support API rev2
+ 514   1          pbVideoResInfo[ 1 ] = ( SiI_Inf.AVI.bPixRepl  << 4 );
+ 515   1          pbVideoResInfo[ 1 ] |= SiI_Inf.Sync.RefrTypeVHPol;
+ 516   1      
+ 517   1          pbVideoResInfo[ 2 ] = siiGetPixClockFromTables( bVidResIndex );
+ 518   1      
+ 519   1          pbVideoResInfo[ 3 ] = (BYTE) ( VModeTables[ bVidResIndex ].Tag.VFreq & 0x00FF );
+ 520   1          pbVideoResInfo[ 4 ] = (BYTE) ( ( VModeTables[ bVidResIndex ].Tag.VFreq >> 8 ) & 0x00FF );
+ 521   1      
+ 522   1          wAux = VModeTables[ bVidResIndex ].Res.H;
+ 523   1          ConvertClocksToPixels ( &wAux );                     // for pixel replicated resolutions take out repl
+             -icated pixels
+ 524   1          pbVideoResInfo[ 5 ] = (BYTE) ( wAux  & 0x00FF);       // active number of pixels
+ 525   1          pbVideoResInfo[ 6 ] = (BYTE) ( ( wAux >> 8 ) & 0x000F );
+ 526   1      
+ 527   1          pbVideoResInfo[ 7 ] = (BYTE) ( VModeTables[ bVidResIndex ].Res.V  & 0x00FF );
+ 528   1          pbVideoResInfo[ 8 ] = (BYTE) ( ( VModeTables[ bVidResIndex ].Res.V >> 8 ) & 0x000F );
+ 529   1      
+ 530   1          wAux = VModeTables[ bVidResIndex ].Tag.Total.Pixels;
+ 531   1          ConvertClocksToPixels ( &wAux );                   // for pixel replicated resolutions take out replic
+             -ated pixels
+ 532   1          pbVideoResInfo[ 9 ] = (BYTE) ( wAux  & 0x00FF);       // total number of pixels
+ 533   1          pbVideoResInfo[ 10 ] = (BYTE) ( ( wAux >> 8 ) & 0x000F );
+ 534   1      
+ 535   1          wAux = ConvNLinesInFieldIntoNLinesInFrame ( VModeTables[ bVidResIndex ].Tag.Total.Lines );
+ 536   1      
+ 537   1          pbVideoResInfo[ 11 ] = (BYTE) ( wAux  & 0x00FF );
+ 538   1          pbVideoResInfo[ 12 ] = (BYTE) ( ( wAux >> 8 ) & 0x000F );
+ 539   1      
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 10  
+
+ 540   1      }
+ 541          //------------------------------------------------------------------------------
+ 542          // Function Name: siiSetVidResDependentVidOutputVormat
+ 543          // Function Description: Functions sets Video Resolution dependent parameters:
+ 544          //                       Pix Replication Divider, Output Divider, Color Converter Type (BT601 vs. BT701)
+ 545          // Accepts: Video Resolution Id, Video Path Select, AVI State
+ 546          // Returns: Error code byte
+ 547          // Globals: bColorimetry, bPixRepl
+ 548          //------------------------------------------------------------------------------
+ 549          
+ 550          BYTE siiSetVidResDependentVidOutputFormat( BYTE bVidResId, BYTE bVideoPathSelect, BYTE bAVI_State ){
+ 551   1      BYTE bECode = FALSE;
+ 552   1      
+ 553   1      
+ 554   1          SetVideoBlankLevel( SiI_Inf.bVResId );  // PC modes and CE have different blank levels
+ 555   1          if( ( bAVI_State == SiI_RX_NoAVI )||( SiI_Inf.AVI.bColorimetry  == SiI_RX_ColorimetryNoInfo ) ) {
+ 556   2              SiI_Inf.AVI.bColorimetry  = GetColorimetryFormVidRes( bVidResId );
+ 557   2          }
+ 558   1          SetColorimetry( SiI_Inf.AVI.bColorimetry );
+ 559   1      
+ 560   1          siiSetVideoPathColorSpaceDependent( SiI_Ctrl.VideoF.bOutputVideoPath, SiI_Inf.AVI.bInputColorSpace );
+ 561   1      
+ 562   1          if( SiI_Inf.AVI.bAVI_State == SiI_RX_NoAVI ){
+ 563   2              SiI_Inf.AVI.bPixRepl =  siiGetPixReplicationFormVidRes( bVidResId );
+ 564   2          }
+ 565   1          if ( !bECode ) {
+ 566   2              siiSetVidResDependentVidPath( SiI_Inf.AVI.bPixRepl, bVideoPathSelect );     // TODO name
+ 567   2      
+ 568   2              if( ( SiI_Ctrl.VideoF.bOutputSyncSelect == SiI_RX_AVC_SOGY ) && siiIsInterlaceMode( bVidResId ) ) 
+             -{
+ 569   3                  if ( ( SiI_Ctrl.bDevId ==  RX_SiI9021 ) || ( SiI_Ctrl.bDevId ==  RX_SiI9031 ) )//YMA changed b
+             -y vk for in new API
+ 570   3                  ConfigureSyncOnYForInretlaceModes( bVidResId );
+ 571   3      
+ 572   3                  else
+ 573   3                      siiWarningHandler( SiI_WC_ChipNoCap);
+ 574   3      
+ 575   3              }
+ 576   2      
+ 577   2          }
+ 578   1          return bECode;
+ 579   1      }
+ 580          
+ 581          //------------------------------------------------------------------------------
+ 582          // Function Name: PrintVModeParameters()
+ 583          // Function Description: This function prints out found video mode information, used for debugging purpose
+ 584          //------------------------------------------------------------------------------
+ 585          #ifdef SII_DUMP_UART
+ 586          void siiPrintVModeParameters( BYTE Index, BYTE SearchRes ) {
+ 587   1          if ( SearchRes ){
+ 588   2              printf("\n");
+ 589   2              if ( SearchRes == 2 )
+ 590   2                  printf("Video Mode has polarity mismatch");
+ 591   2              if ( SiI_Inf.bGlobStatus & SiI_RX_GlobalHDMI_Detected )
+ 592   2                  printf("HDMI MODE ");
+ 593   2              else {
+ 594   3                  printf("DVI MODE ");
+ 595   3                  printf("v. mode detected, AVI will be ignored\n");
+ 596   3              }
+ 597   2              if ( Index < PC_BASE )
+ 598   2                  printf("\nCE Space:");
+ 599   2              else
+C51 COMPILER V9.51   SIIVIDRES                                                             05/29/2013 17:36:15 PAGE 11  
+
+ 600   2                  printf("\nPC Space:");
+ 601   2              printf("Mode ROM-%i",(int)VModeTables[Index].ModeId.Mode_C1);
+ 602   2              if ( VModeTables[Index].ModeId.Mode_C2 )
+ 603   2                  printf(" or %i",(int)VModeTables[Index].ModeId.Mode_C2);
+ 604   2              if ( VModeTables[Index].ModeId.SubMode )
+ 605   2                  printf(" Sub mode: %i",VModeTables[Index].ModeId.SubMode);
+ 606   2              printf(" Resolution: %i x %i@%i\n",VModeTables[Index].Res.H, VModeTables[Index].Res.V, VModeTables
+             -[Index].Tag.VFreq);
+ 607   2      
+ 608   2          }
+ 609   1      }
+ 610          #endif
+ 611          
+ 612          
+ 613          
+ 614          
+ 615          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   3746    ----
+   CONSTANT SIZE    =    324    ----
+   XDATA SIZE       =   ----      80
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       6
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

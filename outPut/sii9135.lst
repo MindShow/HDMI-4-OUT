@@ -1,0 +1,337 @@
+C51 COMPILER V9.00   SII9135                                                               06/28/2013 11:07:05 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE SII9135
+OBJECT MODULE PLACED IN .\outPut\sii9135.obj
+COMPILER INVOKED BY: D:\keil\C51\BIN\C51.EXE bsp\sii9135.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND
+                    - PRINT(.\outPut\sii9135.lst) TABS(2) PREPRINT(.\outPut\sii9135.i) OBJECT(.\outPut\sii9135.obj)
+
+line level    source
+
+   1          
+   2           #include "intrins.h"
+   3           #include "reg52.h"
+   4          #include "intrins.h"
+   5          #include "typedef.h"
+   6          #include "CommonLibrary.h"
+   7          
+   8          /*si9135 I2C Interface*/
+   9            sbit sii9135_SCL = P1^4;
+  10            sbit sii9135_SDA = P1^3;
+  11          
+  12          
+  13          /**--------------------------------------------------------------------------------
+  14          　调用方式：SomeNOP(uchar n)　﹫2010/07/15
+  15          　函数说明：IIC延时函数，I2C专用
+  16          　---------------------------------------------------------------------------------*/
+  17          void sii9135_SomeNOP(uchar n)
+  18          {
+  19   1         data uchar i;
+  20   1         for(i=0;i<n;i++)
+  21   1         {
+  22   2           _nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();_nop_();
+  23   2         }
+  24   1      } 
+  25          
+  26          /**--------------------------------------------------------------------------------
+  27          　调用方式：void　I2CStart(void)　﹫2010/07/15
+  28          　函数说明：IIC启动函数，I2C专用
+  29          　---------------------------------------------------------------------------------*/
+  30          void sii9135_I2CStart(void) 
+  31          {
+  32   1        //EA=0;
+  33   1        sii9135_SDA=1;  
+  34   1        sii9135_SomeNOP(5);
+  35   1        sii9135_SCL=1;
+  36   1        sii9135_SomeNOP(5);
+  37   1        sii9135_SDA=0;
+  38   1        sii9135_SomeNOP(5);
+  39   1        sii9135_SCL=0; 
+  40   1      }
+  41          /**--------------------------------------------------------------------------------
+  42          　调用方式：void　I2CStop(void)　﹫2010/07/15
+  43          　函数说明：IIC停止函数，I2C专用
+  44          　---------------------------------------------------------------------------------*/
+  45          void sii9135_I2CStop(void)
+  46          {
+  47   1        sii9135_SDA=0;  
+  48   1        sii9135_SomeNOP(5);
+  49   1        sii9135_SCL=1;
+  50   1        sii9135_SomeNOP(5);
+  51   1        sii9135_SDA=1;
+  52   1        sii9135_SomeNOP(5);
+  53   1        sii9135_SCL=1;
+  54   1        sii9135_SomeNOP(5);
+C51 COMPILER V9.00   SII9135                                                               06/28/2013 11:07:05 PAGE 2   
+
+  55   1        //EA=1;
+  56   1        sii9135_SomeNOP(5);
+  57   1        Delay_ms(5);
+  58   1      }
+  59          
+  60          /**--------------------------------------------------------------------------------
+  61          　调用方式：bit　I2CAck(void)　﹫2010/07/15
+  62          　函数说明：IIC响应函数，I2C专用，等待从器件接收方的应答
+  63          　---------------------------------------------------------------------------------*/
+  64          bit sii9135_WaitAck(void)
+  65          {
+  66   1        data uchar errtime = 255;//因故障接收方无ACK,超时值为255
+  67   1        sii9135_SDA=1;
+  68   1        sii9135_SomeNOP(5);
+  69   1        sii9135_SCL=0;
+  70   1        sii9135_SomeNOP(5);
+  71   1        while(sii9135_SDA)
+  72   1        { errtime--;
+  73   2          if(!errtime)
+  74   2          {
+  75   3           sii9135_I2CStop();
+  76   3           //SBUF=SystemError=0x11;
+  77   3           return 0;
+  78   3          }
+  79   2        }
+  80   1        sii9135_SCL=1;
+  81   1          sii9135_SomeNOP(5);
+  82   1        //SystemError=0;
+  83   1        sii9135_SCL=0;
+  84   1        return 1;  
+  85   1      }
+  86          
+  87          /**--------------------------------------------------------------------------------
+  88          　调用方式：void　SendAck(void)　﹫2010/07/15
+  89          　函数说明：发送响应函数函数，I2C专用，主器件为接收方，从器件为发送方时，应答信号。
+  90          　---------------------------------------------------------------------------------*/
+  91          void sii9135_SendAck(void)
+  92          {
+  93   1        sii9135_SCL=0;
+  94   1        sii9135_SomeNOP(4);
+  95   1        sii9135_SDA=0;
+  96   1        sii9135_SomeNOP(4);
+  97   1        sii9135_SCL=1;
+  98   1        sii9135_SomeNOP(4);
+  99   1        sii9135_SCL=0;
+ 100   1        sii9135_SomeNOP(4);
+ 101   1      }  
+ 102          
+ 103          /**--------------------------------------------------------------------------------
+ 104          　调用方式：void　SendNotAck(void)　﹫2010/07/15
+ 105          　函数说明：发送无响应函数，I2C专用，主器件为接收方，从器件为发送方时，非应答信号。
+ 106          --------------------------------------------------------------------------------*/
+ 107          void sii9135_SendNotAck(void)
+ 108          {
+ 109   1        sii9135_SCL=0;
+ 110   1        sii9135_SomeNOP(4);
+ 111   1        sii9135_SDA=1;
+ 112   1        sii9135_SomeNOP(4);
+ 113   1        sii9135_SCL=1;
+ 114   1        sii9135_SomeNOP(4);
+ 115   1        sii9135_SCL=0;
+ 116   1        sii9135_SomeNOP(4);
+C51 COMPILER V9.00   SII9135                                                               06/28/2013 11:07:05 PAGE 3   
+
+ 117   1      }
+ 118          /**--------------------------------------------------------------------------------
+ 119          　调用方式：void　I2CSend(uchar　ch)　﹫2010/07/15
+ 120          　函数说明：IIC发送字节函数，I2C专用
+ 121          ---------------------------------------------------------------------------------*/
+ 122          void sii9135_I2CSendByte(uchar Data)
+ 123          {
+ 124   1        uchar i=8;
+ 125   1        while(i--)
+ 126   1        { 
+ 127   2            sii9135_SCL=0;
+ 128   2            sii9135_SomeNOP(1);
+ 129   2          sii9135_SDA=(bit)(Data&0x80);
+ 130   2          Data<<=1;
+ 131   2          sii9135_SomeNOP(5);
+ 132   2          sii9135_SCL=1;
+ 133   2          sii9135_SomeNOP(5);
+ 134   2          }
+ 135   1            sii9135_SCL=0;
+ 136   1      }
+ 137          
+ 138          /**--------------------------------------------------------------------------------
+ 139          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 140          　函数说明：IIC接收字节函数，I2C专用
+ 141          ---------------------------------------------------------------------------------*/
+ 142          uchar sii9135_I2CReceiveByte(void)
+ 143          {
+ 144   1        uchar i=8;
+ 145   1        uchar Data=0;
+ 146   1        sii9135_SDA=1;
+ 147   1        while(i--)
+ 148   1        {
+ 149   2          Data<<=1;
+ 150   2          sii9135_SCL=0;
+ 151   2          sii9135_SomeNOP(5);
+ 152   2          sii9135_SCL=1;
+ 153   2          sii9135_SomeNOP(5);
+ 154   2          Data|=sii9135_SDA;
+ 155   2        }
+ 156   1        sii9135_SCL=0;
+ 157   1        return Data;
+ 158   1      }
+ 159          /**--------------------------------------------------------------------------------
+ 160          　调用方式：uchar　I2CWrite1(void)　﹫2010/07/15
+ 161          　函数说明：IIC写操作函数，I2C专用
+ 162          ---------------------------------------------------------------------------------*/
+ 163          void sii9135_I2CWritep(uchar DeviceAdd,uchar PtrAdd,uchar *Data,unsigned int n)
+ 164          {
+ 165   1        unsigned int i=0;
+ 166   1        sii9135_I2CStart();
+ 167   1        sii9135_I2CSendByte(DeviceAdd);
+ 168   1          sii9135_WaitAck();
+ 169   1        sii9135_I2CSendByte(PtrAdd);
+ 170   1        sii9135_WaitAck();
+ 171   1        for(i=0;i<n;i++)
+ 172   1          {
+ 173   2            sii9135_I2CSendByte(*Data++);
+ 174   2              sii9135_WaitAck();
+ 175   2          }
+ 176   1        sii9135_I2CStop();
+ 177   1      }
+ 178          /**--------------------------------------------------------------------------------
+C51 COMPILER V9.00   SII9135                                                               06/28/2013 11:07:05 PAGE 4   
+
+ 179          　调用方式：uchar　I2CWrite(void)　﹫2010/07/15
+ 180          　函数说明：IIC写操作函数，I2C专用
+ 181          ---------------------------------------------------------------------------------*/
+ 182          
+ 183          void sii9135_I2CWrite(uchar DeviceAdd,uchar PtrAdd,uchar Data)
+ 184          {
+ 185   1        sii9135_I2CStart();
+ 186   1        sii9135_I2CSendByte(DeviceAdd);
+ 187   1        sii9135_WaitAck();
+ 188   1        sii9135_I2CSendByte(PtrAdd);
+ 189   1        sii9135_WaitAck();
+ 190   1        sii9135_I2CSendByte(Data);
+ 191   1        sii9135_WaitAck();
+ 192   1        sii9135_I2CStop();
+ 193   1      }
+ 194          /**--------------------------------------------------------------------------------
+ 195          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 196          　函数说明：IIC读操作函数，I2C专用
+ 197          ---------------------------------------------------------------------------------*/
+ 198          void sii9135_I2CReadp(uchar DeviceAdd,uchar PtrAdd,uchar *Data,unsigned int n)
+ 199          {
+ 200   1        unsigned int i=0;
+ 201   1          sii9135_I2CStart();
+ 202   1        sii9135_I2CSendByte(DeviceAdd);
+ 203   1        sii9135_WaitAck();
+ 204   1        sii9135_I2CSendByte(PtrAdd);
+ 205   1        sii9135_WaitAck();
+ 206   1        sii9135_I2CStart();
+ 207   1        sii9135_I2CSendByte(DeviceAdd+1);
+ 208   1        sii9135_WaitAck();
+ 209   1        for(i=0;i<n;i++)
+ 210   1          {
+ 211   2            *Data++=sii9135_I2CReceiveByte();
+ 212   2            sii9135_SendAck();
+ 213   2          }
+ 214   1        *Data++=sii9135_I2CReceiveByte();
+ 215   1        sii9135_SendNotAck();
+ 216   1        sii9135_I2CStop();
+ 217   1      }
+ 218          /**--------------------------------------------------------------------------------
+ 219          　调用方式：uchar　I2CReceive(void)　﹫2010/07/15
+ 220          　函数说明：IIC读操作函数，I2C专用
+ 221          ---------------------------------------------------------------------------------*/
+ 222          
+ 223          uchar sii9135_I2CRead(uchar DeviceAdd,uchar PtrAdd)
+ 224          {
+ 225   1        uchar Data;
+ 226   1        sii9135_I2CStart();
+ 227   1        sii9135_I2CSendByte(DeviceAdd);
+ 228   1        sii9135_WaitAck();
+ 229   1        sii9135_I2CSendByte(PtrAdd);
+ 230   1          sii9135_WaitAck();
+ 231   1        sii9135_I2CStart();
+ 232   1        sii9135_I2CSendByte(DeviceAdd+1);
+ 233   1        sii9135_WaitAck();
+ 234   1        Data=sii9135_I2CReceiveByte();
+ 235   1        sii9135_SendNotAck();
+ 236   1        sii9135_I2CStop();
+ 237   1        return Data;
+ 238   1      }
+ 239          /**************************************************************
+ 240          *  功能：计算HDMI源的帧率
+C51 COMPILER V9.00   SII9135                                                               06/28/2013 11:07:05 PAGE 5   
+
+ 241          *  Caculate the Frenqucy of filed of video input to sii9135
+ 242          *  return value: 24,25,30,50,60HZ
+ 243          **************************************************************/
+ 244          unsigned char Video_Filed_Frequency_In9135(void)
+ 245           {
+ 246   1          unsigned long T_line = 0;
+ 247   1        unsigned long T_filed = 0;
+ 248   1        unsigned char F = 0;
+ 249   1        //unsigned char H_RESH = sii9135_I2CRead(0x60,0x3B);
+ 250   1        //unsigned char H_RESL = sii9135_I2CRead(0x60,0x3A);
+ 251   1        unsigned int H_RES =  (((sii9135_I2CRead(0x60,0x3B)&0x1F)<<8)|sii9135_I2CRead(0x60,0x3A));
+ 252   1        //unsigned char V_RESH = sii9135_I2CRead(0x60,0x3D);
+ 253   1        //unsigned char V_RESL = sii9135_I2CRead(0x60,0x3C);
+ 254   1        unsigned int V_RES =  (((sii9135_I2CRead(0x60,0x3D)&0x07)<<8)|sii9135_I2CRead(0x60,0x3C));
+ 255   1        unsigned int XCLK_IN_PCLK= (((sii9135_I2CRead(0x60,0x6F)&0x0F)<<8)|sii9135_I2CRead(0x60,0x6E));
+ 256   1        //T_line = (((H_RES/28322000)*XCLK_IN_PCLK)>>2^11);
+ 257   1        //T_filed = T_line*V_RES;
+ 258   1        F = (unsigned char)(((28322000/H_RES/V_RES)<<11)/XCLK_IN_PCLK+3.5);//3.5为矫正值
+ 259   1        return F;
+ 260   1       }
+ 261          
+ 262          /***********************************************************************
+ 263          *
+ 264          *  Caculate the pclk of video input to sii9135
+ 265          *  划分3个区间: 148.5MHZ(148.5/1.001MHZ)--74.25MHZ(/74.25MHZ)--13.5MHZ
+ 266                      -----------------------------------------------------------
+ 267                           PCLK    >74.25mhz    <=74.25MHZ   
+ 268                   Zone     HD       SD
+ 269            rate0_rate1     01       00 
+ 270          * 
+ 271          ***********************************************************************/
+ 272          unsigned char PCLK_Detection(void)
+ 273          {
+ 274   1         unsigned pclk_flag = 0;
+ 275   1         unsigned long PCLK = 0;
+ 276   1         unsigned int XCLK_IN_PCLK= (((sii9135_I2CRead(0x60,0x6F)&0x0F)<<8)|sii9135_I2CRead(0x60,0x6E));
+ 277   1         PCLK = ((28322000/XCLK_IN_PCLK)<<11);
+ 278   1         if(PCLK>74363406)  //1280x720/60p
+ 279   1            pclk_flag = 1;
+ 280   1         else if(PCLK<=74363406)
+ 281   1            pclk_flag = 2;
+ 282   1        return pclk_flag;
+ 283   1      }
+ 284          
+ 285          
+ 286          
+ 287          
+ 288          
+ 289          
+ 290          
+ 291          
+ 292          
+ 293          
+ 294          
+ 295          
+ 296          
+ 297          
+ 298          
+ 299          
+ 300          
+ 301          
+ 302          
+C51 COMPILER V9.00   SII9135                                                               06/28/2013 11:07:05 PAGE 6   
+
+ 303          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1023    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      43
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       2
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

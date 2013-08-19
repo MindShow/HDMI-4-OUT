@@ -1,0 +1,605 @@
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIHDMIRX
+OBJECT MODULE PLACED IN .\outPut\SiIHDMIRX.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIHDMIRX.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECT
+                    -EXTEND PRINT(.\outPut\SiIHDMIRX.lst) TABS(2) PREPRINT(.\outPut\SiIHDMIRX.i) OBJECT(.\outPut\SiIHDMIRX.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name HDMIRX
+   3          // Module Description: this file is used to hadle misc RX functions
+   4          //
+   5          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   6          //
+   7          // No part of this work may be reproduced, modified, distributed, transmitted,
+   8          // transcribed, or translated into any language or computer format, in any form
+   9          // or by any means without written permission of: Silicon Image, Inc.,
+  10          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  11          //------------------------------------------------------------------------------
+  12          
+  13          #include "SiIGlob.h"
+  14          #include "SiITrace.h"
+  15          #include "SiIRXDefs.h"
+  16          #include "SiIRXIO.h"
+  17          #include "SiIHDMIRX.h"
+  18          #include "SiIHAL.h"
+  19          #include "SiIVidIn.h"
+  20          #include "SiIInfoPkts.h"
+  21          #include "SiITTVideo.h"
+  22          #include "SiITTAudio.h"
+  23          #include "SiIAudio.h"
+  24          #include "SiIDeepColor.h"
+  25          
+  26          #include <stdio.h>
+  27          
+  28          static BOOL bSeparateAFE;
+  29          
+  30          //------------------------------------------------------------------------------
+  31          // Function Name: siiRXHardwareReset
+  32          // Function Description: This function makes hardware reset of RX,
+  33          // Accepts: none
+  34          // Returns: none
+  35          // Globals: none
+  36          //------------------------------------------------------------------------------
+  37          void siiRXHardwareReset( void ){
+  38   1      
+  39   1          halAssertResetHDMIRXPin();
+  40   1          halDelayMS(1);
+  41   1          halReleaseResetHDMIRXPin();
+  42   1          halDelayMS(5);
+  43   1      
+  44   1      }
+  45          //------------------------------------------------------------------------------
+  46          // Function Name: siiSetMasterClock
+  47          // Function Description: Sets Master Clock divider which used for Audio Output
+  48          //
+  49          // Accepts: BYTE
+  50          // Returns: none
+  51          // Globals: none
+  52          //------------------------------------------------------------------------------
+  53          void siiSetMasterClock ( BYTE bDividerIndex ){
+  54   1      BYTE bRegVal;
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 2   
+
+  55   1      
+  56   1              bRegVal = siiReadByteHDMIRXP1( RX_FREQ_SVAL_ADDR ) & 0x0F;  //reg 102
+  57   1              siiWriteByteHDMIRXP1( RX_FREQ_SVAL_ADDR, bRegVal | (  bDividerIndex << 6 ) | (  bDividerIndex << 4
+             - ) );
+  58   1      
+  59   1      
+  60   1      }
+  61          
+  62          //------------------------------------------------------------------------------
+  63          // Function Name: siiSetHBRMasterClock
+  64          // Function Description: Sets Master Clock divider which used for Audio Output
+  65          //                       Sets the Fs output as Fs input / 4
+  66          // Accepts: BYTE
+  67          // Returns: none
+  68          // Globals: none
+  69          //------------------------------------------------------------------------------
+  70          void siiSetHBRFs (BOOL qON){
+  71   1      BYTE bECode = FALSE;
+  72   1      BYTE bRegVal;
+  73   1      BYTE bMCLK;
+  74   1      
+  75   1        if(qON)
+  76   1        {
+  77   2              bMCLK = siiReadByteHDMIRXP1( RX_FREQ_SVAL_ADDR ) & 0xF0;  //reg 102
+  78   2          bRegVal = siiReadByteHDMIRXP1( RX_PCLK_FS_ADDR ) & 0x0F;      //reg 117
+  79   2          switch (bRegVal)
+  80   2          {
+  81   3            case _192Fs://192K
+  82   3              bRegVal = _48Fs;//48K
+  83   3              break;
+  84   3                 
+  85   3              case _768Fs://768k
+  86   3              bRegVal = _192Fs;//192K
+  87   3              break;
+  88   3      /*not HBR
+  89   3              case _176Fs://176.4K
+  90   3              bRegVal = _44Fs;//44.10K      
+  91   3              break;
+  92   3      */
+  93   3      
+  94   3      
+  95   3            default:            //YMA 08/17/06 handle invalid values?
+  96   3              break;
+  97   3          }
+  98   2              siiWriteByteHDMIRXP1( RX_FREQ_SVAL_ADDR, bRegVal | bMCLK );
+  99   2          
+ 100   2          //enable sw manually set Fs //100.1
+ 101   2            siiIIC_RX_RWBitsInByteP1( RX_ACR_CTRL1_ADDR, RX_BIT_ACR_FSSEL, SET );
+ 102   2      
+ 103   2      
+ 104   2        }
+ 105   1        else
+ 106   1            siiIIC_RX_RWBitsInByteP1( RX_ACR_CTRL1_ADDR, RX_BIT_ACR_FSSEL, CLR);
+ 107   1      
+ 108   1          siiErrorHandler( bECode );
+ 109   1      }
+ 110          
+ 111                  
+ 112          //------------------------------------------------------------------------------
+ 113          // Function Name: siiIsHDMI_Mode
+ 114          // Function Description: this function checks if RX in HDMI mode
+ 115          //
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 3   
+
+ 116          // Accepts: none
+ 117          // Returns: none
+ 118          // Globals: none
+ 119          //------------------------------------------------------------------------------
+ 120          BOOL siiIsHDMI_Mode( void ){
+ 121   1      BOOL qResult = FALSE;
+ 122   1      
+ 123   1          if ( siiReadByteHDMIRXP1( RX_AUDP_STAT_ADDR) & RX_BIT_HDMI_EN_MASK )
+ 124   1              qResult = TRUE;
+ 125   1          return qResult;
+ 126   1      
+ 127   1      }
+ 128          //------------------------------------------------------------------------------
+ 129          // Function Name:  siiGetRXDeviceInfo
+ 130          // Function Description: reads RX Dev virsion/revision data from RX registers
+ 131          //
+ 132          // Accepts: none
+ 133          // Returns: none
+ 134          // Globals: none
+ 135          //------------------------------------------------------------------------------
+ 136          void siiGetRXDeviceInfo ( BYTE * pbChipVer ){
+ 137   1          siiReadBlockHDMIRXP0(  RX_DEV_IDL_ADDR , 3,  pbChipVer );
+ 138   1      }
+ 139          
+ 140          //------------------------------------------------------------------------------
+ 141          // Function Name: siiRX_PowerDown
+ 142          // Function Description:  sets or claer main power down mode
+ 143          //
+ 144          // Accepts: bPowerDown
+ 145          // Returns: none
+ 146          // Globals: none
+ 147          //------------------------------------------------------------------------------
+ 148          void siiRX_PowerDown (BYTE bPowerDown) {
+ 149   1      
+ 150   1          if ( bPowerDown == ON ) {
+ 151   2              siiIIC_RX_RWBitsInByteP0( RX_SYS_CTRL1_ADDR, RX_BIT_PD_ALL, CLR );
+ 152   2              if ( bSeparateAFE == PRESENT )
+ 153   2                  siiIIC_RX_RWBitsInByteU0( RX_SYS_CTRL1_ADDR, RX_BIT_PD_ALL, CLR );
+ 154   2              }
+ 155   1          else {
+ 156   2              siiIIC_RX_RWBitsInByteP0( RX_SYS_CTRL1_ADDR, RX_BIT_PD_ALL, SET );
+ 157   2              if ( bSeparateAFE == PRESENT )
+ 158   2                  siiIIC_RX_RWBitsInByteU0( RX_SYS_CTRL1_ADDR, RX_BIT_PD_ALL, SET );
+ 159   2              }
+ 160   1          }
+ 161          
+ 162          //------------------------------------------------------------------------------
+ 163          // Function Name: siiRX_DisableTMDSCores
+ 164          // Function Description: Sets global power down mode
+ 165          //
+ 166          // Accepts: none
+ 167          // Returns: none
+ 168          // Globals: none
+ 169          //------------------------------------------------------------------------------
+ 170          void siiRX_DisableTMDSCores( void ){
+ 171   1          siiIIC_RX_RWBitsInByteP0( RX_SYS_SW_SWTCHC_ADDR,
+ 173   1                                  ( RX_BIT_RX0_EN | RX_BIT_DDC0_EN |
+ 173   1                                    RX_BIT_RX1_EN | RX_BIT_DDC1_EN ), CLR );
+ 174   1          if ( bSeparateAFE == PRESENT )
+ 175   1              siiIIC_RX_RWBitsInByteU0( RX_SYS_SW_SWTCHC_ADDR, RX_BIT_RX0_EN, CLR );
+ 176   1      }
+ 177          
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 4   
+
+ 178          
+ 179          //------------------------------------------------------------------------------
+ 180          // Function Name: sii_SetVideoOutputPowerDown
+ 181          // Function Description:
+ 182          //
+ 183          // Accepts: bPowerState
+ 184          // Returns: none
+ 185          // Globals: none
+ 186          //------------------------------------------------------------------------------
+ 187          void sii_SetVideoOutputPowerDown( BYTE bVideoOutputPowerDown ){
+ 188   1      
+ 189   1          switch ( bVideoOutputPowerDown ) {
+ 190   2      
+ 191   2              case SiI_RX_VidOutPD_NoPD:
+ 192   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS_ADDR, RX_BIT_NPD_VIDEO_DAC, SET );
+ 193   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS2_ADDR, RX_BIT_NPD_DIGITAL_OUTPUTS, SET );
+ 194   2                                  break;
+ 195   2      
+ 196   2              case SiI_RX_VidOutPD_Analog:
+ 197   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS_ADDR, RX_BIT_NPD_VIDEO_DAC, CLR );
+ 198   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS2_ADDR, RX_BIT_NPD_DIGITAL_OUTPUTS, SET );
+ 199   2                                  break;
+ 200   2      
+ 201   2              case SiI_RX_VidOutPD_AnalogAndDigital:
+ 202   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS_ADDR, RX_BIT_NPD_VIDEO_DAC, CLR );
+ 203   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS2_ADDR, RX_BIT_NPD_DIGITAL_OUTPUTS, CLR );
+ 204   2                                  break;
+ 205   2      
+ 206   2              case SiI_RX_VidOutPD_Digital:
+ 207   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS_ADDR, RX_BIT_NPD_VIDEO_DAC, SET );
+ 208   2                                  siiIIC_RX_RWBitsInByteP1( RX_PD_SYS2_ADDR, RX_BIT_NPD_DIGITAL_OUTPUTS, CLR );
+ 209   2                                  break;
+ 210   2      
+ 211   2          }
+ 212   1      
+ 213   1      }
+ 214          //------------------------------------------------------------------------------
+ 215          // Function Name: siiRX_GlobalPower
+ 216          // Function Description: Sets or takes from most saving power down mode
+ 217          //
+ 218          // Accepts: bPowerState
+ 219          // Returns: none
+ 220          // Globals: none
+ 221          //------------------------------------------------------------------------------
+ 222          void siiRX_GlobalPower ( BYTE bPowerState ){
+ 223   1      
+ 224   1          if ( bPowerState == SiI_RX_Power_Off){
+ 225   2              siiSetSM_ReqGlobalPowerDown();
+ 226   2              siiSetAudioMuteEvent();
+ 227   2          }
+ 228   1          else if ( SiI_Ctrl.sm_bVideo != SiI_RX_VS_VideoOn ){
+ 229   2              siiChangeVideoInput( SiI_Ctrl.bVidInChannel );
+ 230   2          }
+ 231   1      
+ 232   1      }
+ 233          //------------------------------------------------------------------------------
+ 234          // Function Name: siiRX_CheckCableHPD
+ 235          // Function Description: Checks if HDMI cable has hot plug
+ 236          //
+ 237          // Accepts: none
+ 238          // Returns: BOOL hot plug state
+ 239          // Globals: none
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 5   
+
+ 240          //------------------------------------------------------------------------------
+ 241          BOOL siiRX_CheckCableHPD ( void ){
+ 242   1      BOOL qResult = FALSE;
+ 243   1      
+ 244   1          if ( siiReadByteHDMIRXP0( RX_STATE_ADDR ) &  RX_BIT_CABLE_HPD ) //YMA NOTE /R0x06/bit3/ 5V  ower detec
+             -t 
+ 245   1              qResult = TRUE;
+ 246   1          return qResult;
+ 247   1      }
+ 248          //------------------------------------------------------------------------------
+ 249          // Function Name: siiClearBCHCounter
+ 250          // Function Description: clears BCH counter. The counter accomulates BCH errors
+ 251          //                       if couter won't be clear it can cause HDCP interrupts
+ 252          // Accepts: none
+ 253          // Returns: none
+ 254          // Globals: none
+ 255          //------------------------------------------------------------------------------
+ 256          void siiClearBCHCounter( void ){
+ 257   1      
+ 258   1          siiIIC_RX_RWBitsInByteP0( RX_ECC_CTRL_ADDR, RX_BIT_CLR_BCH_COUNTER , SET );
+ 259   1      }
+ 260          //------------------------------------------------------------------------------
+ 261          // Function Name: InitAECRegisters
+ 262          // Function Description: Initialization of Audio Exception registers which used for
+ 263          //                       auto-muting
+ 264          //------------------------------------------------------------------------------
+ 265          static void InitAECRegisters( void ){
+ 266   1      BYTE abData[3];
+ 267   1      
+ 268   1          abData[0] = 0xC1;
+ 269   1          abData[1] = 0x87;
+ 270   1          abData[2] = 0x01;
+ 271   1          siiWriteBlockHDMIRXP0( RX_AEC1_ADDR, 3, abData);
+ 272   1      
+ 273   1      }
+ 274          //------------------------------------------------------------------------------
+ 275          // Function Name: siiRX_InitializeInterrupts
+ 276          // Function Description: Initilize RX interrupts (used with polling RX interrupt pin)
+ 277          //------------------------------------------------------------------------------
+ 278          static void RX_InitializeInterrupts ( void ){
+ 279   1      BYTE abData[4];
+ 280   1      
+ 281   1      
+ 282   1          abData[0] = 0x42;      // N change, used in repeater configuration
+ 283   1                                 // HDCP Start   
+ 284   1          abData[1] = 0x88;      // HDMI Change SCDT int
+ 285   1       abData[2] = 0x9F;      // infoFrame interrupts enable
+ 286   1          abData[3] = 0x40;      // HDCP Failed
+ 287   1          siiWriteBlockHDMIRXP0( RX_HDMI_INT_GR1_MASK_ADDR, 4, abData);
+ 288   1          abData[0] = 0x58;      // ACC done enable,  VRes Change, HRes Change
+ 289   1          abData[1] = 0x00;      // Aud Ch Status Ready
+ 290   1          siiWriteBlockHDMIRXP0( RX_HDMI_INT_GR2_MASK_ADDR, 2, abData);
+ 291   1          siiWriteByteHDMIRXP0( RX_INFO_FRAME_CTRL_ADDR, RX_BIT_NEW_ACP);
+ 292   1      
+ 293   1      }
+ 294          //------------------------------------------------------------------------------
+ 295          // Function Name: InitSoftwareResetReg
+ 296          // Function Description: Initilize software reset register
+ 297          //------------------------------------------------------------------------------
+ 298          void InitSoftwareResetReg(void){
+ 299   1      
+ 300   1      
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 6   
+
+ 301   1      #ifndef SII_BUG_BETTY_PORT1_BUG
+ 302   1          siiWriteByteHDMIRXP0( RX_SWRST_ADDR, RX_BIT_SW_AUTO ); // when no SCDT software reset is applied
+ 303   1      #endif
+ 304   1      
+ 305   1      
+ 306   1      
+ 307   1          if ( bSeparateAFE == PRESENT )
+ 308   1          {
+ 309   2              siiWriteByteAFEU0( RX_SWRST_ADDR, RX_BIT_SW_AUTO ); // when no SCDT software reset is applied
+ 310   2      
+ 311   2              siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, 0x08 , SET );  // IP requires HDCP reset at start
+ 312   2              siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, 0x08 , CLR );
+ 313   2          }
+ 314   1      }
+ 315          
+ 316          
+ 317          #ifdef SII_BUG_PHOEBE_AUTOSW_BUG
+              //------------------------------------------------------------------------------
+              // Function Name: SetAutoSWReset
+              // Function Description:  this function enables or disables Auto Software reset
+              // Accepts: BOOL qOn
+              // Returns: none
+              // Globals: none
+              //------------------------------------------------------------------------------
+              void siiSetAutoSWReset ( BOOL qOn ) {
+                  if ( ( SiI_Ctrl.bDevId == RX_SiI9023 ) || ( SiI_Ctrl.bDevId == RX_SiI9033 ) ) {
+                      if ( qOn )
+                          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, RX_BIT_SW_AUTO , SET );
+                      else
+                          siiIIC_RX_RWBitsInByteP0( RX_SWRST_ADDR, RX_BIT_SW_AUTO , CLR );
+                  }
+              }
+              #endif
+ 334          //------------------------------------------------------------------------------
+ 335          // Function Name: GetRXDevId
+ 336          // Function Description: used for detection onboard HDMI RX
+ 337          //------------------------------------------------------------------------------
+ 338          BYTE GetRXDevId( void ){
+ 339   1      BYTE abDevInfo[3];
+ 340   1      WORD wDevId;
+ 341   1      BYTE bDevId = 0;
+ 342   1      
+ 343   1          siiGetRXDeviceInfo( abDevInfo );
+ 344   1          wDevId = abDevInfo[0] | ( abDevInfo[1] << 8 );
+ 345   1          switch ( wDevId ){
+ 346   2              case SiI9993:   bDevId = RX_SiI9993;  break;
+ 347   2              case SiI9031:   bDevId = RX_SiI9031;  break;
+ 348   2              case SiI9021:   bDevId = RX_SiI9021;  break;
+ 349   2              case SiI9023:   bDevId = RX_SiI9023;  break;
+ 350   2              case SiI9033:   bDevId = RX_SiI9033;  break;
+ 351   2              case SiI9011:   bDevId = RX_SiI9011;  break;
+ 352   2              case SiI9051:   bDevId = RX_SiI9051;  break;
+ 353   2              case SiI9133:   bDevId = RX_SiI9133;  break;
+ 354   2              case SiI9135:   bDevId = RX_SiI9135;  break;
+ 355   2              case SiI9125:   bDevId = RX_SiI9125;  break;
+ 356   2       
+ 357   2              default:        bDevId = RX_Unknown;
+ 358   2          }
+ 359   1          return bDevId;
+ 360   1      }
+ 361          
+ 362          //------------------------------------------------------------------------------
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 7   
+
+ 363          // Function Name: siiSetAFEClockDelay
+ 364          // Function Description: Set output clock depay for Analog Front End
+ 365          //------------------------------------------------------------------------------
+ 366          
+ 367          void siiSetAFEClockDelay( void ){
+ 368   1      
+ 369   1      #if 0
+                  BYTE bClkCount;
+                  BYTE bDDRdelay;
+                  BYTE abData[2] = { 0x00, 0x60 };
+              
+                  if ( bSeparateAFE == PRESENT ) {
+                      bClkCount = siiReadByteAFEU0( 0x11 );
+                      printf("Count: 0x%02x\n", (int) bClkCount);
+              
+                      if (bClkCount < 0x40) {
+                          bDDRdelay = abData[0];
+                      }
+                      else {
+                          bDDRdelay = abData[1];
+                      }
+              
+                      siiWriteByteAFEU0( RX_AFE_DDR_DSA_ADDR,  bDDRdelay );
+                      printf("DDRdelay: 0x%02x\n", (int) bDDRdelay);
+                  }
+              #endif
+ 389   1      }
+ 390          
+ 391          //------------------------------------------------------------------------------
+ 392          // Function Name: siiInitAFE
+ 393          // Function Description: Initialize the Analog Front End
+ 394          //------------------------------------------------------------------------------
+ 395          void siiInitAFE( void ){
+ 396   1          siiWriteByteAFEU0( RX_AFE_DDR_CONF_ADDR, 0x01 );
+ 397   1          siiWriteByteAFEU0( RX_AFE_DDR_DSA_ADDR,  0x00);
+ 398   1          bSeparateAFE = TRUE;
+ 399   1      }
+ 400          
+ 401          //------------------------------------------------------------------------------
+ 402          // Function Name: siiConfigureTerminationValue
+ 403          // Function Description: 
+ 404          //------------------------------------------------------------------------------
+ 405          void siiSetNormalTerminationValueCh1( BOOL qOn ){
+ 406   1      BYTE bRegVal;
+ 407   1      //YMA set the terminaion to 3k ohm first and then after HPD, change it back to normal
+ 408   1        bRegVal = siiReadByteHDMIRXP0 (RX_TMDS_TERMCTRL_ADDR);
+ 409   1        if(qOn)
+ 410   1          siiWriteByteHDMIRXP0 (RX_TMDS_TERMCTRL_ADDR, bRegVal&0xFC); //YMA clear bit 0,1 for ch0
+ 411   1        
+ 412   1        else
+ 413   1          siiWriteByteHDMIRXP0 (RX_TMDS_TERMCTRL_ADDR, bRegVal|0x03); //YMA set bit 0,1 for ch0
+ 414   1        
+ 415   1      
+ 416   1      }
+ 417          //------------------------------------------------------------------------------
+ 418          // Function Name: siiSetNormalTerminationValueCh2
+ 419          // Function Description: 
+ 420          //------------------------------------------------------------------------------
+ 421          void siiSetNormalTerminationValueCh2( BOOL qOn ){
+ 422   1      BYTE bRegVal;
+ 423   1      //YMA set the terminaion to 3k ohm first and then after HPD, change it back to normal
+ 424   1        bRegVal = siiReadByteHDMIRXP0 (RX_TMDS_TERMCTRL_ADDR);
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 8   
+
+ 425   1        if(qOn)
+ 426   1          siiWriteByteHDMIRXP0 (RX_TMDS_TERMCTRL_ADDR, bRegVal&0x9F); //YMA clear bit 5,6 for ch2
+ 427   1        
+ 428   1        else
+ 429   1          siiWriteByteHDMIRXP0 (RX_TMDS_TERMCTRL_ADDR, bRegVal|0x60); //YMA set bit 5,6 for ch2
+ 430   1          
+ 431   1      }
+ 432          //------------------------------------------------------------------------------
+ 433          // Function Name: siiInitializeRX
+ 434          // Function Description: Intialize RX
+ 435          //
+ 436          // Accepts: pointer on data which are used for inialization
+ 437          // Returns: none
+ 438          // Globals: none
+ 439          //------------------------------------------------------------------------------
+ 440          BOOL siiInitializeRX( BYTE * pbInit ){
+ 441   1      BOOL qResult = FALSE;
+ 442   1      BOOL qFPGA  = FALSE;
+ 443   1      BOOL qUrsula = FALSE;
+ 444   1      BYTE bRegVal;
+ 445   1      WORD wTimeOut = 500;
+ 446   1      
+ 447   1          siiRXHardwareReset();
+ 448   1      //YMA the block below takes too long time for !qUrsula devices
+ 449   1      //move to after devID is detected.
+ 450   1      /*    if ( siiWaitForAckAFE( wTimeOut )  ){
+ 451   1              siiInitAFE();
+ 452   1              wTimeOut = 15000;
+ 453   1              qUrsula = TRUE;
+ 454   1          }
+ 455   1      */
+ 456   1          if (  pbInit[0] & SiI_RX_FPGA ) {
+ 457   2              qFPGA = TRUE;
+ 458   2              wTimeOut = 15000;
+ 459   2          }
+ 460   1      
+ 461   1          if ( siiWaitForAckHDMIRX( wTimeOut )  ){
+ 462   2      
+ 463   2              InitSoftwareResetReg();
+ 464   2              SiI_Ctrl.bDevId = GetRXDevId();
+ 465   2      
+ 466   2            if( (SiI_Ctrl.bDevId != RX_SiI9135)&&(SiI_Ctrl.bDevId != RX_SiI9125))
+ 467   2            if( siiWaitForAckAFE( wTimeOut )  ){
+ 468   3                  siiInitAFE();
+ 469   3                  wTimeOut = 15000;
+ 470   3                  qUrsula = TRUE;
+ 471   3              }   
+ 472   2             
+ 473   2              if (  qFPGA && (!qUrsula) )
+ 474   2                  siiWriteByteHDMIRXP1( RX_ACR_CTRL3_ADDR, RX_CTS_THRESHOLD | RX_BIT_MCLK_LOOPBACK | 0x01);
+ 475   2              else
+ 476   2                  siiWriteByteHDMIRXP1( RX_ACR_CTRL3_ADDR, RX_CTS_THRESHOLD | RX_BIT_MCLK_LOOPBACK );
+ 477   2      
+ 478   2              siiWriteByteHDMIRXP1( RX_LK_WIN_SVAL_ADDR, 0x0F );
+ 479   2              siiWriteByteHDMIRXP1( RX_LK_THRESHOLD_ADDR, 0x20 );
+ 480   2              siiWriteByteHDMIRXP1( RX_LK_THRESHOLD_ADDR + 1, 0x00 );
+ 481   2              siiWriteByteHDMIRXP1( RX_LK_THRESHOLD_ADDR + 2, 0x00 );   // siiWrite threshold for PLL unlock int
+             -errupt
+ 482   2      
+ 483   2              if ( pbInit[0] & SiI_RX_InvertOutputVidClock ){       // set Video bus width and Video data edge
+ 484   3                  siiWriteByteHDMIRXP0( RX_SYS_CTRL1_ADDR, RX_BIT_VID_BUS_24BIT | RX_BIT_INVERT_OUTPUT_VID_CLK )
+             -;
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 9   
+
+ 485   3              }
+ 486   2              else {
+ 487   3                  siiWriteByteHDMIRXP0( RX_SYS_CTRL1_ADDR, RX_BIT_VID_BUS_24BIT );
+ 488   3              }
+ 489   2      //YMA removed since actually no bit for it, changed to #define
+ 490   2      //        if ( pbInit[0] & SiI_RX_DSD_Uses_I2S_SPDIF_Buses )
+ 491   2      #ifdef SiI_RX_DSD_Uses_I2S_SPDIF_Buses
+                           siiIIC_RX_RWBitsInByteP1 ( RX_AUDIO_SWAP_ADDR, BIT_DSD_USES_I2S_SPDIF_BUSES, SET );
+              #endif
+ 494   2              siiWriteByteHDMIRXP1( RX_I2S_CTRL1_ADDR, 0x40 );      // SCL edge, if need customize SPDIF paramet
+             -ers
+ 495   2              siiWriteByteHDMIRXP1( RX_HDMI_CRIT1_ADDR, 0x06 );
+ 496   2              siiWriteByteHDMIRXP1( RX_HDMI_CRIT2_ADDR, 0x0C );
+ 497   2      
+ 498   2              siiWriteByteHDMIRXP0( RX_INT_CNTRL_ADDR, 0x06 );     // Set Interrupt polarity (Neg.)
+ 499   2              siiWriteByteHDMIRXP1( RX_AUDP_MUTE_ADDR, 0x03 );     // AudioVideo Mute ON
+ 500   2      
+ 501   2              siiWriteByteHDMIRXP0( RX_APLL_POLE_ADDR, 0x88 );   // Audio PLL setting
+ 502   2              siiWriteByteHDMIRXP0( RX_APLL_CLIP_ADDR, 0x16 );   // Audio PLL setting, improved PLL lock time
+ 503   2      
+ 504   2      //YMA CP9135/25 reference board has 5ohm external resistor, so the TMDS termination control should set to 
+             -45 ohm  50 ohm
+ 505   2      // instead of the default value 50 ohm
+ 506   2      // 9125/35 has only the TQFP package, so this applies to all the devices have 9125/35 device ID
+ 507   2      
+ 508   2      //YMA removed. set the terminaion to 3k ohm first and then after HPD, change it back to normal
+ 509   2      //    if ( SiI_Ctrl.bDevId == RX_SiI9135 || SiI_Ctrl.bDevId ==  RX_SiI9125)
+ 510   2      //    siiWriteByteHDMIRXP0 (RX_TMDS_TERMCTRL_ADDR, 0x0c); //45 ohm
+ 511   2      
+ 512   2              if ( ( SiI_Ctrl.bDevId == RX_SiI9133 )||( SiI_Ctrl.bDevId == RX_SiI9135 || SiI_Ctrl.bDevId ==  RX_
+             -SiI9125) 
+ 513   2            || ( SiI_Ctrl.bDevId == RX_SiIIP11 ) ) {
+ 514   3                  siiWriteByteHDMIRXP0( RX_TMDS_ECTRL_ADDR, 0x00 );  // set equlizer register value, optimized f
+             -or different length of
+ 515   3              }
+ 516   2             else {
+ 517   3                  siiWriteByteHDMIRXP0( RX_TMDS_ECTRL_ADDR, 0xC3 );  // set equlizer register value, optimized f
+             -or different length of
+ 518   3              }
+ 519   2              siiWriteByteHDMIRXP1( RX_MPEG_DEC_ADDR, ISRC1_Type ); //  no need to process MPEG as data is screw
+             -ed there
+ 520   2      
+ 521   2              siiWriteByteHDMIRXP1( RX_MUTE_DIV_ADDR, 0x02 ); // ramp slope for Soft Audio Mute
+ 522   2              siiSetMasterClock ( SelectMClock & pbInit[0] );
+ 523   2      
+ 524   2              InitAECRegisters();
+ 525   2              RX_InitializeInterrupts ();
+ 526   2      
+ 527   2              bRegVal = siiReadByteHDMIRXP0( RX_SYS_SW_SWTCHC_ADDR );
+ 528   2              if ( ( SiI_Ctrl.bVidInChannel == SiI_RX_VInCh1 ) || ( SiI_Ctrl.bDevId == RX_SiI9011 )  )
+ 529   2                  siiWriteByteHDMIRXP0( RX_SYS_SW_SWTCHC_ADDR, bRegVal | 0x11 );
+ 530   2              else
+ 531   2                  siiWriteByteHDMIRXP0( RX_SYS_SW_SWTCHC_ADDR, bRegVal | 0x22 );
+ 532   2      
+ 533   2              if ( bSeparateAFE == PRESENT )
+ 534   2                  siiWriteByteAFEU0( RX_SYS_SW_SWTCHC_ADDR, 0x01 );
+ 535   2      
+ 536   2              siiWriteByteHDMIRXP0( RX_ECC_BCH_THRESHOLD, 0x02 );
+ 537   2      
+ 538   2              siiClearBCHCounter();
+ 539   2              qResult = TRUE;
+ 540   2              if ( siiCheckSupportDeepColorMode () ){
+C51 COMPILER V9.51   SIIHDMIRX                                                             05/29/2013 17:36:10 PAGE 10  
+
+ 541   3                  if (SiI_RX_SetOutputColorDepth ( pbInit[1] ) ){
+ 542   4                      qResult = FALSE;
+ 543   4                  }
+ 544   3              }
+ 545   2      
+ 546   2          }
+ 547   1          else {
+ 548   2              siiErrorHandler( SiI_EC_NoAckIIC );
+ 549   2      
+ 550   2          }
+ 551   1          return qResult;
+ 552   1      }
+ 553          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1217    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      22
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1       8
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

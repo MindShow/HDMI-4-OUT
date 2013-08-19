@@ -1,0 +1,1 @@
+"sii9135\UDebugHLIIC.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\UDebugHLIIC.lst) TABS (2) PREPRINT(.\outPut\UDebugHLIIC.i) OBJECT(.\outPut\UDebugHLIIC.obj)

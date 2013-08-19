@@ -1,0 +1,609 @@
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIRX_API
+OBJECT MODULE PLACED IN .\outPut\SiIRX_API.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIRX_API.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECT
+                    -EXTEND PRINT(.\outPut\SiIRX_API.lst) TABS(2) PREPRINT(.\outPut\SiIRX_API.i) OBJECT(.\outPut\SiIRX_API.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name SiIRX_API
+   3          // Module Description: RX API functions
+   4          //
+   5          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   6          //
+   7          // No part of this work may be reproduced, modified, distributed, transmitted,
+   8          // transcribed, or translated into any language or computer format, in any form
+   9          // or by any means without written permission of: Silicon Image, Inc.,
+  10          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  11          //------------------------------------------------------------------------------
+  12          #include "SiIRX_API.h"
+  13          #include "SiIGlob.h"
+  14          #include "SiIVidF.h"
+  15          #include "SiIVidIn.h"
+  16          #include "SiIAudio.h"
+  17          #include "SiITTAudio.h"
+  18          #include "SiITTVideo.h"
+  19          #include "SiISysCtrl.h"
+  20          #include "SiITTasks.h"
+  21          #include "SiIHDMIRX.h"
+  22          #include "SiIInfoPkts.h"
+  23          #include "SiIDiagnostic.h"
+  24          #include "SiIISR.h"
+  25          #include "SiIHAL.h"
+  26          #include "SiITrace.h"
+  27          
+  28          //------------------------------------------------------------------------------
+  29          // System Commands
+  30          //------------------------------------------------------------------------------
+  31          
+  32          //------------------------------------------------------------------------------
+  33          // Function Name:  SiI_RX_GetAPIInfo
+  34          // ---
+  35          // Function Description:  This function is used to get information about API
+  36          //
+  37          // Accepts: <description of input>
+  38          // Returns: Number of Errors code and/or warnings
+  39          // Globals: <global variables and system state changes>
+  40          //------------------------------------------------------------------------------
+  41          BYTE SiI_RX_GetAPI_Info ( BYTE * pbRXParameters ){
+  42   1      WORD wStartSysTimerTicks;
+  43   1      
+  44   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+  45   1          wStartSysTimerTicks = siiGetTicksNumber();
+  46   1      
+  47   1          pbRXParameters [0] = SiI_RX_API_Version;
+  48   1          pbRXParameters [1] = SiI_RX_API_Revision;
+  49   1          pbRXParameters [2] = SiI_RX_API_Build;
+  50   1          pbRXParameters [3] = SiI_RX_API_DiagnosticCommands;
+  51   1          siiGetRXDeviceInfo ( &pbRXParameters [4]);
+  52   1          pbRXParameters [7] = SII_REQ_TASK_CALL_TIME;
+  53   1      
+  54   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 2   
+
+  55   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+  56   1      
+  57   1      }
+  58          
+  59          //------------------------------------------------------------------------------
+  60          // Function Name: SiI_RX_InitializeSystem
+  61          // Function Description: Initialize global data and devices
+  62          //
+  63          // Accepts: none
+  64          // Returns: Number of Errors code and/or warnings
+  65          // Globals: none
+  66          //------------------------------------------------------------------------------
+  67          BYTE SiI_RX_InitializeSystem( BYTE * pbSysInit ){
+  68   1      WORD wStartSysTimerTicks;
+  69   1      
+  70   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+  71   1          wStartSysTimerTicks = siiGetTicksNumber();
+  72   1      
+  73   1          halInitGPIO_Pins();
+  74   1          siiInitializeRX( pbSysInit );
+  75   1          siiSaveRXInitParameters ( pbSysInit );
+  76   1          siiInitilizeSystemData( ON );
+  77   1          siiTurnAudioOffAndSetSM_AudioOff();
+  78   1          siiMuteVideoAndSetSM_SyncInChange();
+  79   1      
+  80   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+  81   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+  82   1      
+  83   1      }
+  84          
+  85          //------------------------------------------------------------------------------
+  86          // Function Name: SiI_RX_GlobalPower
+  87          // Function Description:
+  88          //
+  89          // Accepts: none
+  90          // Returns: Number of Errors code and/or warnings
+  91          // Globals: none
+  92          //------------------------------------------------------------------------------
+  93          BYTE SiI_RX_GlobalPower ( BYTE bPowerState ){
+  94   1      WORD wStartSysTimerTicks;
+  95   1      
+  96   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+  97   1          wStartSysTimerTicks = siiGetTicksNumber();
+  98   1      
+  99   1          siiRX_GlobalPower( bPowerState );
+ 100   1      
+ 101   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 102   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 103   1      }
+ 104          
+ 105          //------------------------------------------------------------------------------
+ 106          // Function Name: SiI_RX_SetVideoInput
+ 107          // ---
+ 108          // Function Description:  Selects HDMI (DVI) input
+ 109          // Accepts: bVideoInputChannels
+ 110          // Returns: Number of Errors code and/or warnings
+ 111          // Globals: none
+ 112          //------------------------------------------------------------------------------
+ 113          BYTE SiI_RX_SetVideoInput ( BYTE bVideoInputChannels ){
+ 114   1      WORD wStartSysTimerTicks;
+ 115   1      
+ 116   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 3   
+
+ 117   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 118   1      
+ 119   1        SiI_Ctrl.bVidInChannel = bVideoInputChannels;//YMA added
+ 120   1      
+ 121   1          siiChangeVideoInput( bVideoInputChannels );
+ 122   1      
+ 123   1      
+ 124   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 125   1          return siiGetErrorsWarnings();
+ 126   1      }
+ 127          
+ 128          //------------------------------------------------------------------------------
+ 129          // Function Name: SiI_RX_SetAudioMute
+ 130          // Function Description: This command provides a manual mute of
+ 131          //                       the Silicon Image HDMI receiver's audio output.
+ 132          //                       This command does not change the behavior of any device's
+ 133          //                       auto mute functionality
+ 134          // Accepts: none
+ 135          // Returns: none
+ 136          // Globals: none
+ 137          //------------------------------------------------------------------------------
+ 138          BYTE SiI_RX_SetAudioVideoMute ( BYTE bAudioVideoMute ){
+ 139   1      WORD wStartSysTimerTicks;
+ 140   1      
+ 141   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 142   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 143   1      
+ 144   1          if ( bAudioVideoMute & SiI_RX_AVMuteCtrl_MuteAudio )
+ 145   1      
+ 146   1          siiSetSM_ReqHoldAudioMuteAndStartMuting (ON);
+ 147   1          else if( siiIsAudioHoldMuteState () )
+ 148   1      
+ 149   1          siiSetSM_ReqHoldAudioMuteAndStartMuting (OFF);
+ 150   1          if ( bAudioVideoMute & SiI_RX_AVMuteCtrl_MuteVideo )
+ 151   1      
+ 152   1          siiSetGlobalVideoMuteAndSM_Video ( ON  );
+ 153   1          else
+ 154   1      
+ 155   1          siiSetGlobalVideoMuteAndSM_Video ( OFF  );
+ 156   1      
+ 157   1      
+ 158   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 159   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 160   1      }
+ 161          
+ 162          //------------------------------------------------------------------------------
+ 163          // Function Name: SiI_RX_DoTasks
+ 164          // Function Description:
+ 165          //
+ 166          // Accepts: pointer on events changes
+ 167          // Returns: Number of Errors code and/or warnings
+ 168          // Globals: <global variables and system state changes>
+ 169          //------------------------------------------------------------------------------
+ 170          BYTE SiI_RX_DoTasks (  BYTE * pbRXParameters  ){  // Slot time is time between last and current DoTasks me
+             -asured in ms
+ 171   1      WORD wNumberOfTicks;
+ 172   1      BYTE bTimeFromLastDoTasks;
+ 173   1      BYTE bError;
+ 174   1      
+ 175   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 176   1          wNumberOfTicks = siiGetTicksNumber();
+ 177   1          if ( SiI_Ctrl.sm_bVideo != SiI_RX_VS_GlobalPowerDown ) {
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 4   
+
+ 178   2      //        if ( SiI_Inf.bGlobStatus & SiI_RX_Global_HotPlugDetect ) {
+ 179   2      #ifdef SII_USE_RX_PIN_INTERRUPT
+                          bError = siiRX_PinInterruptHandler();
+              #else
+ 182   2                  bError = siiRX_BitInterruptHandler();
+ 183   2      #endif
+ 184   2      //        }
+ 185   2              if ( bError == SiI_EC_HDCP_StuckInterrupt ){
+ 186   3                  siiReInitRX();
+ 187   3              }
+ 188   2      
+ 189   2      #ifndef FIXED_TASK_CALL_TIME
+ 190   2              bTimeFromLastDoTasks = siiDoTasksTimeDiffrence();
+ 191   2      #else
+                      bTimeFromLastDoTasks = SII_TASK_CALL_TIME;
+              #endif
+ 194   2              siiTimerTasksHandler( bTimeFromLastDoTasks );
+ 195   2              pbRXParameters [0] = siiGetSMEventChanges ();
+ 196   2          }
+ 197   1          siiMeasureProcLastAPI_Ticks( wNumberOfTicks );
+ 198   1      
+ 199   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 200   1      }
+ 201          
+ 202          //------------------------------------------------------------------------------
+ 203          // Function Name: SiI_RX_GetSystemInformation
+ 204          // Function Description:
+ 205          //
+ 206          // Accepts: none
+ 207          // Returns: nNumber of Errors code and/or warnings
+ 208          // Globals: none
+ 209          //------------------------------------------------------------------------------
+ 210          BYTE SiI_RX_GetSystemInformation ( BYTE *pbRXParameters ){
+ 211   1      WORD wStartSysTimerTicks;
+ 212   1      
+ 213   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 214   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 215   1      
+ 216   1          pbRXParameters [0] = SiI_Ctrl.sm_bVideo;    // is BYTE bVideoState
+ 217   1          pbRXParameters [1] = SiI_Ctrl.sm_bAudio;    // is BYTE bAudioState
+ 218   1          if ( siiCheckIfVideoInputResolutionReady( ) )
+ 219   1              pbRXParameters [2] = siiGetVideoResId ( SiI_Inf.bVResId );       // is BYTE bModeId
+ 220   1          else {
+ 221   2              if ( siiCheckIfVideoOutOfRangeOrVMNotDetected())
+ 222   2                  pbRXParameters [2] = SiI_ResNotDetected;
+ 223   2              else
+ 224   2                  pbRXParameters [2] = SiI_ResNoInfo;
+ 225   2          }
+ 226   1          pbRXParameters [3] = SiI_Inf.AVI.bInputColorSpace; // is BYTE bInputColorSpace
+ 227   1          pbRXParameters [4] = SiI_Inf.AVI.bColorimetry//;     // is BYTE bColorimetry
+ 228   1                              | (SiI_Inf.AVI.bInputColorDepth << 4);     // is  upper 4 bits is Color Depth
+ 229   1          pbRXParameters [5] = SiI_Inf.bHDCPStatus; // is BYTE bHDCPStatus
+ 230   1          pbRXParameters [6] = SiI_Inf.bGlobStatus; // is BYTE bGlobStatus
+ 231   1          pbRXParameters [7] = SiI_Inf.bNewInfoPkts;
+ 232   1      
+ 233   1      
+ 234   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 235   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 236   1      }
+ 237          
+ 238          //------------------------------------------------------------------------------
+ 239          // Packet Commands
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 5   
+
+ 240          //------------------------------------------------------------------------------
+ 241          
+ 242          //------------------------------------------------------------------------------
+ 243          // Function Name:  SiI_RX_GetInfoFrame
+ 244          // Function Description:  Get the current Info Frame received by the Silicon Image HDMI receiver.
+ 245          //
+ 246          // Accepts: bInfoFrameType
+ 247          // Returns: BYTE *pbRXParameters pointer on Info Frame data
+ 248          // Globals: none
+ 249          //------------------------------------------------------------------------------
+ 250          
+ 251          
+ 252          BYTE SiI_RX_GetPackets ( BYTE bInfoPacketType, BYTE *pbRXParameters ){
+ 253   1      WORD wStartSysTimerTicks;
+ 254   1      
+ 255   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 256   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 257   1      
+ 258   1          siiGetInfoPacket ( bInfoPacketType, pbRXParameters );
+ 259   1          siiClearNewPacketEvent (  bInfoPacketType );
+ 260   1      
+ 261   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 262   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 263   1      }
+ 264          
+ 265          //------------------------------------------------------------------------------
+ 266          // Video Commands
+ 267          //------------------------------------------------------------------------------
+ 268          
+ 269          //------------------------------------------------------------------------------
+ 270          // Function Name: SiI_RX_SetVideoOutputFormat
+ 271          // ---
+ 272          // Function Description: Sets Video Output Format of SiI RX, function sets static part
+ 273          //                      of Video Path, dynamic part will be complete after detection of
+ 274          //                      video resolution
+ 275          // Accepts: parameters to set Video Output Format
+ 276          // Returns: Number of Errors code and/or warnings
+ 277          // Globals: sm_bVideo, bVideoPath, bInputColorSpace
+ 278          //------------------------------------------------------------------------------
+ 279          
+ 280          BYTE SiI_RX_SetVideoOutputFormat ( BYTE  bOutputVideoPathSelect,
+ 281                                             BYTE  bOutputSyncSelect,
+ 282                                             BYTE  bOutputSyncCtrl,
+ 283                                             BYTE  bOutputVideoCtrl
+ 284                                           ) {
+ 285   1      WORD wStartSysTimerTicks;
+ 286   1      BYTE abVidFormatData[3];
+ 287   1      
+ 288   1      
+ 289   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 290   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 291   1      
+ 292   1          abVidFormatData[0] = abVidFormatData[1] = abVidFormatData[2] = 0;
+ 293   1          siiGetVideoFormatData( abVidFormatData );       //YMA restore the configuration, or outpout depth lost
+             -ed    
+ 294   1      
+ 295   1          siiMuteVideoAndSetSM_SyncInChange();
+ 296   1      
+ 297   1          siiPrepVideoPathSelect( bOutputVideoPathSelect, SiI_Inf.AVI.bInputColorSpace, abVidFormatData );
+ 298   1          siiPrepSyncSelect( bOutputSyncSelect, abVidFormatData );
+ 299   1          siiPrepSyncCtrl( bOutputSyncCtrl, abVidFormatData );
+ 300   1          siiPrepVideoCtrl( bOutputVideoCtrl, abVidFormatData );
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 6   
+
+ 301   1          siiSetVideoFormatData( abVidFormatData ); // Update Video format data to  Vid. Mode/Ctrl regs.
+ 302   1      
+ 303   1          SiI_Ctrl.VideoF.bOutputVideoPath = bOutputVideoPathSelect; // later will be used in Vid. Res. Dependen
+             -t functions
+ 304   1          SiI_Ctrl.VideoF.bOutputSyncSelect = bOutputSyncSelect;
+ 305   1          SiI_Ctrl.VideoF.bOutputSyncCtrl = bOutputSyncCtrl;
+ 306   1          SiI_Ctrl.VideoF.bOutputVideoCtrl = bOutputVideoCtrl;
+ 307   1      
+ 308   1      
+ 309   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 310   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 311   1      
+ 312   1      }
+ 313          
+ 314          //------------------------------------------------------------------------------
+ 315          // Function Name: SiI_RX_GetVideoOutputFormat
+ 316          // Function Description: Gets Video Output Format
+ 317          //
+ 318          // Accepts: none
+ 319          // Returns: Number of Errors code and/or warnings
+ 320          // Globals: none
+ 321          //------------------------------------------------------------------------------
+ 322          BYTE SiI_RX_GetVideoOutputFormat ( BYTE * pbRXParameters){
+ 323   1      WORD wStartSysTimerTicks;
+ 324   1      
+ 325   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 326   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 327   1      
+ 328   1          pbRXParameters[0] = SiI_Ctrl.VideoF.bOutputVideoPath; // later will be used in Vid. Res. Dependent fun
+             -ctions
+ 329   1          pbRXParameters[1] = SiI_Ctrl.VideoF.bOutputSyncSelect;
+ 330   1          pbRXParameters[2] = SiI_Ctrl.VideoF.bOutputSyncCtrl;
+ 331   1          pbRXParameters[3] = SiI_Ctrl.VideoF.bOutputVideoCtrl;
+ 332   1      
+ 333   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 334   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 335   1      }
+ 336          
+ 337          //------------------------------------------------------------------------------
+ 338          // Function Name: SiI_RX_GetInputVideoResolution
+ 339          // Function Description:
+ 340          //
+ 341          // Accepts: none
+ 342          // Returns: Number of Errors code and/or warnings
+ 343          // Globals: none
+ 344          //------------------------------------------------------------------------------
+ 345          BYTE SiI_RX_GetVideoInputResolution ( BYTE * pbRXParameters ){
+ 346   1      WORD wStartSysTimerTicks;
+ 347   1      
+ 348   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 349   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 350   1          if ( siiCheckIfVideoInputResolutionReady( ) )
+ 351   1              siiGetVideoInputResolution( SiI_Inf.bVResId, pbRXParameters );
+ 352   1          else {
+ 353   2              pbRXParameters[0] = SiI_ResNoInfo;
+ 354   2          }
+ 355   1      #ifdef SII_NO_RESOLUTION_DETECTION
+ 356   1          if ( siiCheckIfVideoOutOfRangeOrVMNotDetected())
+ 357   1              siiGetVideoInputResolutionromRegisters( pbRXParameters );
+ 358   1      #endif
+ 359   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 360   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 7   
+
+ 361   1      }
+ 362          
+ 363          //------------------------------------------------------------------------------
+ 364          // Audio Commands
+ 365          //------------------------------------------------------------------------------
+ 366          
+ 367          //------------------------------------------------------------------------------
+ 368          // Function Name: SiI_RX_SetAudioOutputFormat
+ 369          // Function Description: Set the Silicon image HDMI receivers audio output format.
+ 370          //                       Both audio interfaces, SPDIF and I2S can be selected simultaneously.
+ 371          //                       The Smooth HW Mute can also be enabled regardless of
+ 372          //                       the audio interfaces combination selected.
+ 373          //
+ 374          //                       The BYTE bI2SMap is a reserved parameter in the API specification.
+ 375          //                       It is being used to set up the I2S mapping, the API does not support
+ 376          //                       configurations other than the default.
+ 377          // Accepts: none
+ 378          // Returns: none
+ 379          // Globals: none
+ 380          //------------------------------------------------------------------------------
+ 381          BYTE SiI_RX_SetAudioOutputFormat ( WORD wAudioOutputSelect,
+ 382                                             WORD wI2SBusFormat,
+ 383                                              BYTE bI2SMap ,
+ 384                            BYTE bDSDHBRFormat){ //YMA 2 added for API rev2
+ 385   1      WORD wStartSysTimerTicks;
+ 386   1      AudioOutputFormatType AudioOutputFormat;
+ 387   1      
+ 388   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 389   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 390   1      
+ 391   1          siiTurnAudioOffAndSetSM_AudioOff();
+ 392   1      
+ 393   1          AudioOutputFormat.wOutputSelect = SiI_Ctrl.wAudioOutputSelect = wAudioOutputSelect;
+ 394   1          AudioOutputFormat.wI2SBusFormat = wI2SBusFormat;
+ 395   1          AudioOutputFormat.bI2SMap = bI2SMap;
+ 396   1        AudioOutputFormat.bDSDHBRFormat=bDSDHBRFormat;
+ 397   1          siiSetAudioOutputFormat( &AudioOutputFormat );
+ 398   1      
+ 399   1      //YMA 2 add to save the configuration for later restore when HBR/DSD -> PCM
+ 400   1        SavedAudioOutputFormat = AudioOutputFormat;
+ 401   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 402   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 403   1      }
+ 404          
+ 405          //------------------------------------------------------------------------------
+ 406          // Function Name: SiI_RX_GetAudioOutputFormat
+ 407          // Function Description:
+ 408          //
+ 409          // Accepts: none
+ 410          // Returns: pbRXParameters [0] is BYTE bAudioOutputControl, pbRXParameters [1] is WORD wI2SBusFormat
+ 411          //          pbRXParameters [4] is BYTE bI2SMap
+ 412          //      pbRXParameters [5] is BYTE bDSDHBRFormat
+ 413          // Globals: none
+ 414          //------------------------------------------------------------------------------
+ 415          BYTE SiI_RX_GetAudioOutputFormat ( BYTE * pbRXParameters ){
+ 416   1      WORD wStartSysTimerTicks;
+ 417   1      //AudioOutputFormatType AudioOutputFormat;
+ 418   1      
+ 419   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 420   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 421   1      //YMA change to return the save value instead of read from registers.
+ 422   1      //the reg value may be not the right mode
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 8   
+
+ 423   1      
+ 424   1      //    siiGetAudioOutputFormat( &AudioOutputFormat );
+ 425   1      
+ 426   1          pbRXParameters[0] = (BYTE)(SavedAudioOutputFormat.wOutputSelect & 0xFF);
+ 427   1          pbRXParameters[1] = (BYTE)((SavedAudioOutputFormat.wOutputSelect >> 8 ) & 0xFF);
+ 428   1          pbRXParameters[2] = (BYTE)(SavedAudioOutputFormat.wI2SBusFormat & 0xFF);
+ 429   1          pbRXParameters[3] = (BYTE)((SavedAudioOutputFormat.wI2SBusFormat >> 8 ) & 0xFF);
+ 430   1          pbRXParameters[4] = SavedAudioOutputFormat.bI2SMap;
+ 431   1        pbRXParameters[5] = SavedAudioOutputFormat.bDSDHBRFormat;
+ 432   1      
+ 433   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 434   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 435   1      }
+ 436          
+ 437          //------------------------------------------------------------------------------
+ 438          // Function Name: SiI_RX_GetAudioInputStatus
+ 439          // Function Description:
+ 440          //
+ 441          // Accepts: none
+ 442          // Returns: none
+ 443          // Globals: none
+ 444          //------------------------------------------------------------------------------
+ 445          BYTE SiI_RX_GetAudioInputStatus( BYTE * pbRXParameters ){
+ 446   1      WORD wStartSysTimerTicks;
+ 447   1      
+ 448   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 449   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 450   1          pbRXParameters[0] =  SiI_Inf.bAudioErr;
+ 451   1          if (siiIsAudioStatusReady()){
+ 452   2      
+ 453   2              pbRXParameters[1] =  SiI_Inf.AudioStatus.bRepresentation;         // Compressed, PCM, DSD
+ 454   2              pbRXParameters[2] =  SiI_Inf.AudioStatus.bAccuracyAndFs;
+ 455   2              pbRXParameters[3] =  SiI_Inf.AudioStatus.bLength;
+ 456   2              pbRXParameters[4] =  SiI_Inf.AudioStatus.bNumberChannels;
+ 457   2          }
+ 458   1          else {
+ 459   2              pbRXParameters[1] = 0xFF;
+ 460   2              pbRXParameters[2] = 0xFF;
+ 461   2              pbRXParameters[3] = 0xFF;
+ 462   2              pbRXParameters[4] = 0xFF;
+ 463   2          }
+ 464   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 465   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 466   1      }
+ 467          
+ 468          
+ 469          //------------------------------------------------------------------------------
+ 470          // Common Commands
+ 471          //------------------------------------------------------------------------------
+ 472          
+ 473          //------------------------------------------------------------------------------
+ 474          // Function Name:
+ 475          // Function Description:
+ 476          //
+ 477          // Accepts: none
+ 478          // Returns: none
+ 479          // Globals: none
+ 480          //------------------------------------------------------------------------------
+ 481          BYTE SiI_GetWarnings( BYTE * pbRXParameters ){
+ 482   1      WORD wStartSysTimerTicks;
+ 483   1      BYTE bNumberWrn;
+ 484   1      
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 9   
+
+ 485   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 486   1      
+ 487   1          bNumberWrn = siiGetWarningData(  pbRXParameters );
+ 488   1      
+ 489   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 490   1          return bNumberWrn;   // if Result FALSE, no errors and warning messages
+ 491   1      
+ 492   1      }
+ 493          
+ 494          //------------------------------------------------------------------------------
+ 495          // Function Name:
+ 496          // Function Description:
+ 497          //
+ 498          // Accepts: none
+ 499          // Returns: none
+ 500          // Globals: none
+ 501          //------------------------------------------------------------------------------
+ 502          BYTE SiI_GetErrors( BYTE * pbRXParameters ){
+ 503   1      WORD wStartSysTimerTicks;
+ 504   1      BYTE bNumberErr;
+ 505   1      
+ 506   1      
+ 507   1          wStartSysTimerTicks = siiGetTicksNumber();
+ 508   1      
+ 509   1          bNumberErr = siiGetErrorsData( pbRXParameters );
+ 510   1      
+ 511   1          siiMeasureProcLastAPI_Ticks( wStartSysTimerTicks );
+ 512   1          return bNumberErr;   // if Result FALSE, no errors and warning messages
+ 513   1      }
+ 514          
+ 515          //------------------------------------------------------------------------------
+ 516          // Diagnostics Commands
+ 517          //------------------------------------------------------------------------------
+ 518          
+ 519          //------------------------------------------------------------------------------
+ 520          // Function Name: SiI_Diagnostic_GetNCTS
+ 521          // Function Description:   Get information about N/CTS packets, these packets are sent
+ 522          //                         by TX and used for Audio Clock Regeneration (ACR)
+ 523          // Accepts: none
+ 524          // Returns: pointer on requested data
+ 525          // Globals: none
+ 526          //------------------------------------------------------------------------------
+ 527          BYTE SiI_Diagnostic_GetNCTS ( BYTE * pbRXParameters ){
+ 528   1      
+ 529   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 530   1          siiGetNCTS( pbRXParameters );
+ 531   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 532   1      }
+ 533          
+ 534          //------------------------------------------------------------------------------
+ 535          // Function Name: SiI_Diagnostic_GetABKSV
+ 536          // Function Description:   Get AKSV and BKSV ( for more information see HDCP specefication)
+ 537          //
+ 538          // Accepts: none
+ 539          // Returns: pointer on requested data
+ 540          // Globals: none
+ 541          //------------------------------------------------------------------------------
+ 542          BYTE SiI_Diagnostic_GetABKSV ( BYTE * pbRXParameters ) {
+ 543   1      
+ 544   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 545   1          siiGetABKSV( pbRXParameters );
+ 546   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+C51 COMPILER V9.51   SIIRX_API                                                             05/29/2013 17:36:09 PAGE 10  
+
+ 547   1      }
+ 548          
+ 549          //------------------------------------------------------------------------------
+ 550          // Function Name:
+ 551          // Function Description:
+ 552          //
+ 553          // Accepts: none
+ 554          // Returns: none
+ 555          // Globals: none
+ 556          //------------------------------------------------------------------------------
+ 557          BYTE SiI_Diagnostic_GetAPIExeTime(BYTE * pbRXParameters ){
+ 558   1      
+ 559   1          siiResetErrorsAndWarnings(); // Number of Warning Messages = Zero
+ 560   1          siiDiagnostic_GetAPI_ExeTime( pbRXParameters );
+ 561   1          return siiGetErrorsWarnings();   // if Result FALSE, no errors and warning messages
+ 562   1      }
+ 563          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1657    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      95
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

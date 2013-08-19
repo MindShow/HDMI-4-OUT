@@ -1,0 +1,1 @@
+"bsp\ep9142.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\ep9142.lst) TABS (2) PREPRINT(.\outPut\ep9142.i) OBJECT(.\outPut\ep9142.obj)

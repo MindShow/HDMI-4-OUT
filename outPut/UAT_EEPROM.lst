@@ -1,0 +1,103 @@
+C51 COMPILER V9.51   UAT_EEPROM                                                            05/29/2013 17:36:16 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE UAT_EEPROM
+OBJECT MODULE PLACED IN .\outPut\UAT_EEPROM.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\UAT_EEPROM.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJEC
+                    -TEXTEND PRINT(.\outPut\UAT_EEPROM.lst) TABS(2) PREPRINT(.\outPut\UAT_EEPROM.i) OBJECT(.\outPut\UAT_EEPROM.obj)
+
+line level    source
+
+   1          #include "UAT_EEPROM.h"
+   2          //------------------------------------------------------------------------------
+   3          // Module Name: AT_EEPROM
+   4          //
+   5          // Module Description:  this low level driver for reading/writing Atmel AT89C51ID2 EEPROM
+   6          //
+   7          // Copyright © 2005 Silicon Image, Inc.
+   8          // All rights reserved.
+   9          //------------------------------------------------------------------------------
+  10          
+  11          //------------------------------------------------------------------------------
+  12          // Function Name: siiReadByteInternEEPROM
+  13          // Function Description:  This function reads one byte of Internal EEPROM of AT89C51ID2
+  14          //                        Internal EEPROM uses XDATA adressing of 8051, when EEPROM XDATA is selected
+  15          //                        RAM XDATA is not accessible. Input parameters are should be
+  16          //                        converted to DATA segment before switching to EEPROM XDATA segment
+  17          // Accepts: wAddr, address of EEPROM location
+  18          // Returns: pointer on byte which was received form EEPROM
+  19          // Globals: none
+  20          //------------------------------------------------------------------------------
+  21          void siiReadByteInternEEPROM ( WORD wAddr, BYTE * pbData ) {
+  22   1      BYTE xdata * abEEPROM;
+  23   1      WORD data wDAddr;
+  24   1      BYTE bDData;
+  25   1      
+  26   1          wDAddr = wAddr;
+  27   1      
+  28   1          halDisableMCUInterrupts();
+  29   1          halIntEEPROM_Enable();
+  30   1      
+  31   1          abEEPROM = wAddr;
+*** WARNING C289 IN LINE 31 OF sii9135\UAT_EEPROM.c: '=': converting non-pointer to pointer
+  32   1      
+  33   1          while ( halIsIntEEPROM_Busy() );
+  34   1      
+  35   1          bDData = *abEEPROM;
+  36   1      
+  37   1          halIntEEPROM_Disable();
+  38   1          halEnableMCUInterrupts();
+  39   1          * pbData = bDData;
+  40   1      
+  41   1      }
+  42          //------------------------------------------------------------------------------
+  43          // Function Name: siiWriteByteInternEEPROM
+  44          // Function Description:  This function writes one byte of Internal EEPROM of AT89C51ID2
+  45          //                        Internal EEPROM uses XDATA adressing of 8051, when EEPROM XDATA is selected
+  46          //                        RAM XDATA is not accessible. Input parameters are should be
+  47          //                        converted to DATA segment before switching to EEPROM XDATA segment
+  48          // Accepts: wAddr, address of EEPROM location
+  49          //                 pointer on byte which will be written into EEPROM
+  50          // Returns:  none
+  51          // Globals: none
+  52          //------------------------------------------------------------------------------
+  53          
+C51 COMPILER V9.51   UAT_EEPROM                                                            05/29/2013 17:36:16 PAGE 2   
+
+  54          void siiWriteByteInternEEPROM ( WORD wAddr, BYTE bData ) {
+  55   1      BYTE xdata * abEEPROM;
+  56   1      WORD data wDAddr;
+  57   1      BYTE bDData;
+  58   1      
+  59   1          wDAddr = wAddr;
+  60   1          bDData = bData;
+  61   1      
+  62   1          halDisableMCUInterrupts();
+  63   1          halIntEEPROM_Enable();
+  64   1      
+  65   1          abEEPROM = wAddr;
+*** WARNING C289 IN LINE 65 OF sii9135\UAT_EEPROM.c: '=': converting non-pointer to pointer
+  66   1      
+  67   1          while ( halIsIntEEPROM_Busy() );
+  68   1      
+  69   1          *abEEPROM = bDData;
+  70   1      
+  71   1          halIntEEPROM_Disable();
+  72   1          halEnableMCUInterrupts();
+  73   1      
+  74   1      }
+  75          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     55    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----       4
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  2 WARNING(S),  0 ERROR(S)

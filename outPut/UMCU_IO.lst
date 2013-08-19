@@ -1,0 +1,128 @@
+C51 COMPILER V9.51   UMCU_IO                                                               05/29/2013 17:36:19 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE UMCU_IO
+OBJECT MODULE PLACED IN .\outPut\UMCU_IO.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\UMCU_IO.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEX
+                    -TEND PRINT(.\outPut\UMCU_IO.lst) TABS(2) PREPRINT(.\outPut\UMCU_IO.i) OBJECT(.\outPut\UMCU_IO.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name UMCU_IO
+   3          // Module Description: This mudule handels MCU input/output which doesn't
+   4          //                     belong to SiIHAL.c (API hardware abstraction layer)
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          #include "UMCU_IO.h"
+  14          #include "UGlob.h"
+  15          
+  16          
+  17          BOOL qTXBusy;
+  18          //------------------------------------------------------------------------------
+  19          // Function Name: siiWriteGPIO
+  20          // Function Description: Write GPIO, this functionused for direct IO control
+  21          //------------------------------------------------------------------------------
+  22          void siiWriteGPIO( BYTE * pbGPIO ){
+  23   1      
+  24   1         if( pbGPIO[0] & 0x01 )
+  25   1              halSetHPD1Pin();
+  26   1         else
+  27   1              halClearHPD1Pin();
+  28   1         if( pbGPIO[0] & 0x02 )
+  29   1              halSetHPD2Pin();
+  30   1         else
+  31   1              halClearHPD2Pin();
+  32   1      }
+  33          //------------------------------------------------------------------------------
+  34          // Function Name: siiReadGPIO
+  35          // Function Description: This function reads Hot Plug Detect pins
+  36          //------------------------------------------------------------------------------
+  37          void siiReadGPIO( BYTE * pbGPIO ){
+  38   1      
+  39   1          pbGPIO[0] = pbGPIO[1] = pbGPIO[2] = pbGPIO[3] = 0;
+  40   1          if ( halGetHPD1Pin() )
+  41   1              pbGPIO[0] |= 0x01;
+  42   1          if ( halGetHPD2Pin() )
+  43   1              pbGPIO[0] |= 0x02;
+  44   1      }
+  45          
+  46          //------------------------------------------------------------------------------
+  47          // Function Name: SIO_InterruptHandler
+  48          // Function Description: This function reads Serial Port and writes data into command buffer
+  49          //                       Clears TX interrupts
+  50          //------------------------------------------------------------------------------
+  51          #ifdef _8051_
+  52          void SIO_InterruptHandler(void)  interrupt 4 {
+  53   1      static BYTE bChCount;
+  54   1      
+C51 COMPILER V9.51   UMCU_IO                                                               05/29/2013 17:36:19 PAGE 2   
+
+  55   1          if( RI ) {
+  56   2              if ( bCommState == ReadyRX ) {
+  57   3                  if ( !qBuffInUse){
+  58   4                      if ( bRxIndex < RX_BUF_SIZE){
+  59   5                          RXBuffer[ bRxIndex++ ] = SBUF;
+  60   5                          bChCount++;
+  61   5                          if ( qFuncExe && ( bChCount == 8 ) ) {
+  62   6                              PutChar(0xE0);
+  63   6                              bChCount = 0;
+  64   6                              bRxIndex = 0;
+  65   6                          }
+  66   5                      }
+  67   4                  }
+  68   3              }
+  69   2              else {
+  70   3                  if ( SBUF == START_FRAME_RX ){
+  71   4                      bCommState = ReadyRX;
+  72   4                      bCommTO = 10;
+  73   4                      bChCount = 0;
+  74   4                  }
+  75   3              }
+  76   2              RI = 0;
+  77   2          }
+  78   1          if ( TI ) {
+  79   2              TI = 0;
+  80   2              qTXBusy  = 0;
+  81   2          }
+  82   1      }
+  83          #endif
+  84          //------------------------------------------------------------------------------
+  85          // Function Name: PutChar
+  86          // Function Description: This function sends Char to UART or Character LCD, it
+  87          //                       used for printing out debug information as well as
+  88          //                       supports communitation protocol with PC
+  89          //------------------------------------------------------------------------------
+  90          void PutChar( char Ch ){
+  91   1      #ifdef _8051_
+  92   1      
+  93   1          while( qTXBusy );
+  94   1          qTXBusy = 1;
+  95   1          SBUF = Ch;
+  96   1      
+  97   1      #endif
+  98   1      }
+  99          
+ 100          
+ 101          
+ 102          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    272    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      1       3
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,1 @@
+"sii9135\uauddac.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\uauddac.lst) TABS (2) PREPRINT(.\outPut\uauddac.i) OBJECT(.\outPut\uauddac.obj)

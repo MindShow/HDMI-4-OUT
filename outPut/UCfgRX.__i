@@ -1,0 +1,1 @@
+"sii9135\UCfgRX.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\UCfgRX.lst) TABS (2) PREPRINT(.\outPut\UCfgRX.i) OBJECT(.\outPut\UCfgRX.obj)

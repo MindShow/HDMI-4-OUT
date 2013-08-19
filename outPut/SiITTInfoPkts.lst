@@ -1,0 +1,124 @@
+C51 COMPILER V9.51   SIITTINFOPKTS                                                         05/29/2013 17:36:14 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIITTINFOPKTS
+OBJECT MODULE PLACED IN .\outPut\SiITTInfoPkts.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiITTInfoPkts.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OB
+                    -JECTEXTEND PRINT(.\outPut\SiITTInfoPkts.lst) TABS(2) PREPRINT(.\outPut\SiITTInfoPkts.i) OBJECT(.\outPut\SiITTInfoPkts.ob
+                    -j)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiITTInfoPkts
+   3          //
+   4          // Module Description: time based Info handling
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include "SiIInfoPkts.h"
+  15          #include "SiIGlob.h"
+  16          #include "SiIRXIO.h"
+  17          #include "SiIRXDefs.h"
+  18          #include "SiITrace.h"
+  19          
+  20          BYTE abOldInfoPkt[2] = { 0x00, 0x00 };
+  21          
+  22          //------------------------------------------------------------------------------
+  23          // Function Name:  siiResetACPPacketData
+  24          // Function Description:  Clears data in ACP packet
+  25          //
+  26          // Accepts: none
+  27          // Returns: none
+  28          // Globals: none
+  29          //------------------------------------------------------------------------------
+  30          void siiResetACPPacketData ( void ) {
+  31   1      
+  32   1          abOldInfoPkt[0] = abOldInfoPkt[1] = 0;
+  33   1      }
+  34          
+  35          //------------------------------------------------------------------------------
+  36          // Function Name: CheckACPInterruptAndClearIfSet
+  37          // Function Description: checking Audio Code Protection Packet interrupt
+  38          //------------------------------------------------------------------------------
+  39          static BOOL CheckACPInterruptAndClearIfSet( void ){
+  40   1      BOOL qResult = FALSE;
+  41   1      
+  42   1        if( siiReadByteHDMIRXP0( RX_HDMI_INT_ST6_ADDR ) & RX_BIT_ACP_PACKET){
+  43   2              siiWriteByteHDMIRXP0( RX_HDMI_INT_ST6_ADDR, RX_BIT_ACP_PACKET);
+  44   2              qResult = TRUE;
+  45   2        }
+  46   1        return qResult;
+  47   1      
+  48   1      }
+  49          //------------------------------------------------------------------------------
+  50          // Function Name: InfoACPInterruptHandler
+  51          // Function Description: checks ACP status
+  52          //------------------------------------------------------------------------------
+  53          void InfoACPInterruptHandler( void ){          // SiI_RX_NewInfo_ACP
+C51 COMPILER V9.51   SIITTINFOPKTS                                                         05/29/2013 17:36:14 PAGE 2   
+
+  54   1      BYTE abInfoPkt[2];
+  55   1      
+  56   1          siiReadBlockHDMIRXP1( RX_ACP_INFO_PKT_ADDR, 2, abInfoPkt);
+  57   1      
+  58   1          if( abInfoPkt[0] == ACP_Type ){
+  59   2      // call ACP processing
+  60   2              if( abInfoPkt[1] > 1 ){
+  61   3                  SiI_Inf.bGlobStatus |= SiI_RX_GlobalHDMI_ACP; // Audio is protected
+  62   3              }
+  63   2              else {
+  64   3                   // Flag repported on upper layer, Enable Digital Output
+  65   3                  SiI_Inf.bGlobStatus &= (~SiI_RX_GlobalHDMI_ACP);
+  66   3              }
+  67   2              if ( ( abInfoPkt[0] != abOldInfoPkt[0] ) || ( abInfoPkt[1] != abOldInfoPkt[1] )) {
+  68   3                  abOldInfoPkt[0] = abInfoPkt[0];
+  69   3                  abOldInfoPkt[1] = abInfoPkt[1];
+  70   3                  SiI_Inf.bNewInfoPkts |= SiI_RX_NewInfo_ACP;
+  71   3              }
+  72   2          }
+  73   1      }
+  74          
+  75          
+  76          //------------------------------------------------------------------------------
+  77          // Function Name:  siiTTInfoFrameHandler
+  78          // Function Description: switches between Info decode addresses in order
+  79          //                       to be able receive all types of Info, call checking ACP status
+  80          // Accepts: none
+  81          // Returns: none
+  82          // Globals: none
+  83          //------------------------------------------------------------------------------
+  84          void siiTTInfoFrameHandler( void ){
+  85   1      
+  86   1      
+  87   1          if( CheckACPInterruptAndClearIfSet () ){
+  88   2              InfoACPInterruptHandler();  // checks ACP packet
+  89   2          }
+  90   1          else {
+  91   2              SiI_Inf.bGlobStatus &= (~SiI_RX_GlobalHDMI_ACP);
+  92   2              SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_ACP);
+  93   2          }
+  94   1      
+  95   1      
+  96   1      }
+  97          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    134    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      2       2
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

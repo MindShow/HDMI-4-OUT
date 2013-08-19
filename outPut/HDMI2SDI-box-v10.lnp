@@ -1,0 +1,10 @@
+".\outPut\STARTUP.obj",
+".\outPut\uart.obj",
+".\outPut\ep9132.obj",
+".\outPut\eeprom.obj",
+".\outPut\feedback.obj",
+".\outPut\CommonLibrary.obj",
+".\outPut\rxConf.obj",
+".\outPut\main.obj" 
+TO ".\outPut\HDMI2SDI-box-v10" 
+PRINT(".\outPut\HDMI2SDI-box-v10.m51")

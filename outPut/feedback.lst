@@ -1,0 +1,269 @@
+C51 COMPILER V9.00   FEEDBACK                                                              07/31/2013 11:07:31 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE FEEDBACK
+OBJECT MODULE PLACED IN .\outPut\feedback.obj
+COMPILER INVOKED BY: D:\keil\C51\BIN\C51.EXE bsp\feedback.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEN
+                    -D PRINT(.\outPut\feedback.lst) TABS(2) PREPRINT(.\outPut\feedback.i) OBJECT(.\outPut\feedback.obj)
+
+line level    source
+
+   1          #include "feedback.h"
+   2          #include "typedef.h"
+   3          #include "eeprom.h"
+   4          #include "uart.h"
+   5          #include "string.h"  
+   6          #include "ep9132.h"
+   7          
+   8          
+   9          //EDID BUFFER 
+  10          unsigned char xdata edidBuff[128]={0};
+  11          
+  12          unsigned char code portTypeArray[4] = { 0x01,0x38,0x0,0xc0  }; //HDMI板卡，ep9132，AC Couple
+  13                                                             //不支持音频输入输出
+  14                                                             //支持HDCP,EDID COPY,CEC
+  15          
+  16          extern uchar childBoardAddr;
+  17          /**********************************************
+  18          // Description: 查询端口类型是否支持EDID功能
+  19          // Argument   : 端口号
+  20          // Return     ：0: Not support EDID  1: support EDID 
+  21          // Note       : none
+  22          **********************************************/
+  23          uchar checkPortType(uchar port)
+  24          {
+  25   1         port = port;
+  26   1         //sendByte(portTypeArray[1]);
+  27   1         if( (portTypeArray[1]&0x08) == 0x08 ) //support edid copy 
+  28   1           return 1;
+  29   1         else
+  30   1           return 0;     
+  31   1      }
+  32          /*****************************************************************************
+  33          // Description: 查询EDID或者DVI接口是否连接显示终端
+  34          // Argument   : 端口号
+  35          // Return     ：0: Not connected monitor  1: connected monitor
+  36          // Note       : 这个函数是对PCF8574T进行读操作;首先上电初始化端口应设为输出1
+  37          *****************************************************************************/
+  38          uchar checkConnection(uchar port)
+  39          {
+  40   1          uchar temp = 0;
+  41   1          eeprom_I2CWrite_PCF8574(PCF8574_ADDR_W,0xff); //output 0xff 
+  42   1          temp = eeprom_I2CRead_PCF8574T();
+  43   1          switch(port)
+  44   1          {
+  45   2             case 0x01:
+  46   2                  if( temp == 0xfe)//port 1 is connected monitor
+  47   2                   return 1;
+  48   2                  else 
+  49   2                   return 0;
+  50   2             case 0x02:
+  51   2                  if( temp == 0xfd)//port 2 is connected monitor
+  52   2                   return 1;
+  53   2                  else 
+  54   2                   return 0;
+C51 COMPILER V9.00   FEEDBACK                                                              07/31/2013 11:07:31 PAGE 2   
+
+  55   2             case 0x03:
+  56   2                  if( temp == 0xfb)//port 3 is connected monitor
+  57   2                   return 1;
+  58   2                  else 
+  59   2                   return 0;
+  60   2             case 0x04:
+  61   2                  if( temp == 0xf7)//port 4 is connected monitor
+  62   2                   return 1;
+  63   2                  else 
+  64   2                   return 0;    
+  65   2          default:
+  66   2            break;        
+  67   2          }
+  68   1      }
+  69          //***************************************************************************************
+  70          // Description : 设置卡板地址返回命令
+  71          // Argument    : cmd:指令  dataLen:数据长度  childBoardAddr  
+  72          // Return      : none
+  73          // Note        :
+  74          //***************************************************************************************
+  75          // void uartReturn(unsigned char cmd,unsigned char dataLen,unsigned char childBoardAddr)
+  76          // {
+  77          //   unsigned char tmpChar;
+  78          //   while( 0 == Com0Putch( 0xAB ) );             //feedback cmd head
+  79          //   while( 0 == Com0Putch( childBoardAddr ) );   //addr
+  80          //   while( 0 == Com0Putch( cmd ) );              //command
+  81          //   while( 0 == Com0Putch( dataLen ) );          //data length
+  82          //   while( 0 == Com0Putch( childBoardAddr ) );
+  83          //   
+  84          //   tmpChar ^= 0xAB;
+  85          //   tmpChar ^= childBoardAddr ;
+  86          //   tmpChar ^= cmd;
+  87          //   tmpChar ^= dataLen;
+  88          //   tmpChar ^= childBoardAddr ;
+  89          //   
+  90          //   while( 0 == Com0Putch( tmpChar ) );          //异或校验
+  91          //  }
+  92          
+  93           void uartReturn(unsigned char childBoardAddr)
+  94          { 
+  95   1        uchar temp = 0;  //must have
+  96   1          
+  97   1        temp += 0xAB;
+  98   1        temp += childBoardAddr;
+  99   1        temp += 0x30;
+ 100   1        temp += 0x01;
+ 101   1        temp += childBoardAddr;
+ 102   1        
+ 103   1        setRS485( TX_EN );  //enable rs485 tx 
+ 104   1        
+ 105   1        sendByte(0xAB);
+ 106   1        sendByte(childBoardAddr);
+ 107   1        sendByte(0x30);
+ 108   1        sendByte(0x01);
+ 109   1        sendByte(childBoardAddr);
+ 110   1        sendByte(temp);
+ 111   1        
+ 112   1        setRS485( RX_EN );  //enable rs485 rx 
+ 113   1      }
+ 114          //***************************************************************************************
+ 115          // Description :查询端口类型指令返回函数
+ 116          // Argument    : childBoardAddr  ptr:数据内容第一个元素地址 
+C51 COMPILER V9.00   FEEDBACK                                                              07/31/2013 11:07:31 PAGE 3   
+
+ 117          // Return      :none
+ 118          // Note        :none
+ 119          //*************************************************************************************** 
+ 120           void sendPortType(unsigned char childBoardAddr,unsigned char *ptr)
+ 121          {
+ 122   1          unsigned char tmpChar = 0,k = 0, dat = 0;
+ 123   1      //    while( 0 == Com0Putch( 0xAB ) ); //feedback cmd head
+ 124   1      //    while( 0 == Com0Putch( childBoardAddr ) );
+ 125   1      //    while( 0 == Com0Putch( cmd ) );
+ 126   1      //    while( 0 == Com0Putch( dataLen ) );
+ 127   1         tmpChar += 0xAB;
+ 128   1         tmpChar += childBoardAddr ;
+ 129   1         tmpChar += 0x31;
+ 130   1         tmpChar += 0x04;
+ 131   1         for(k=0;k<4;k++)  //caulatue指令数据内容校验和
+ 132   1         {
+ 133   2            dat = *(ptr+k);
+ 134   2            tmpChar += dat;
+ 135   2         }
+ 136   1            
+ 137   1        
+ 138   1          setRS485( TX_EN );  //enable rs485 tx   
+ 139   1          sendByte(0xAB);
+ 140   1          sendByte(childBoardAddr);
+ 141   1          sendByte(0x31);
+ 142   1          sendByte(0x04);
+ 143   1          for(k=0;k<4;k++)  //caulatue指令数据内容校验和
+ 144   1          {
+ 145   2            sendByte( *(ptr+k) );
+ 146   2          } 
+ 147   1         sendByte(tmpChar);
+ 148   1         
+ 149   1         setRS485( RX_EN );  //enable rs485 rx 
+ 150   1      }
+ 151          
+ 152          //*************************************************************************************************
+ 153          // Description : 读取相应端口的EDID front 128 bytes and fullfill 
+ 154          // Argument    : none
+ 155          // Return      : 0：读取失败   1：读取成功
+ 156          // Note        : none
+ 157          //*************************************************************************************************    
+ 158           bit edidRead1(void)
+ 159           {
+ 160   1          unsigned char k = 0;
+ 161   1          bit tmp;
+ 162   1          memset(edidBuff,0,128); //清0 edid buffer
+ 163   1          for(k=0;k<16;k++)
+ 164   1           tmp =  ep9132_I2CReadp(edidRomAddrWrit,8*k,&edidBuff[k*8],8);
+ 165   1           //sendByte('a');
+ 166   1         return tmp;
+ 167   1       }
+ 168          
+ 169          //***************************************************************************************
+ 170          // Description : 读取相应端口的EDID  后128字节
+ 171          // Argument    : none
+ 172          // Return      : 0：读取失败   1：读取成功
+ 173          // Note        :
+ 174          //*************************************************************************************** 
+ 175           bit edidRead2()
+ 176           {
+ 177   1        unsigned char k = 0;
+ 178   1          bit tmp;
+C51 COMPILER V9.00   FEEDBACK                                                              07/31/2013 11:07:31 PAGE 4   
+
+ 179   1          memset(edidBuff,0,128); //清0 edid buffer
+ 180   1          for(k=16;k<32;k++)
+ 181   1           tmp =  ep9132_I2CReadp(edidRomAddrWrit,8*k,&edidBuff[(k-16)*8],8);
+ 182   1           //sendByte('a');
+ 183   1         return tmp;
+ 184   1       }
+ 185           
+ 186          //***************************************************************************************
+ 187          // Description : 相应背板读取某个端口EDID命令的函数
+ 188          // Argument    : none
+ 189          // Return      : none
+ 190          // Note        : none
+ 191          //***************************************************************************************    
+ 192          void feedBackEdid(unsigned char CMD,unsigned char childBoardAddr,unsigned char excuteResult,unsigned char 
+             -*edidBuff)
+ 193          {
+ 194   1          unsigned char k = 0,tmpChar = 0;
+ 195   1      //    while( 0 == Com0Putch( 0xAB ) ); //feedback cmd head
+ 196   1      //    while( 0 == Com0Putch( childBoardAddr ) );
+ 197   1      //    while( 0 == Com0Putch( cmd ) );
+ 198   1      //    while( 0 == Com0Putch( 0x81 ) );  //data length
+ 199   1      //     while( 0 == Com0Putch( excuteResult ) );   
+ 200   1          tmpChar += 0xAB;
+ 201   1          tmpChar += childBoardAddr ;
+ 202   1          tmpChar += CMD;
+ 203   1          tmpChar += 0x81;
+ 204   1          tmpChar += excuteResult;
+ 205   1          for(k=0;k<128;k++)
+ 206   1          {
+ 207   2             tmpChar += edidBuff[k];
+ 208   2          } 
+ 209   1        
+ 210   1          setRS485( TX_EN );  //enable rs485 tx 
+ 211   1         
+ 212   1          sendByte( 0xAB );
+ 213   1          sendByte( childBoardAddr );
+ 214   1          sendByte( CMD );
+ 215   1          sendByte( 0x81 );
+ 216   1          sendByte( excuteResult );
+ 217   1          for(k=0;k<128;k++)
+ 218   1          {
+ 219   2             sendByte( edidBuff[k] ); //128 Bytes EDID Data
+ 220   2          }    
+ 221   1          sendByte( tmpChar );  
+ 222   1          
+ 223   1          setRS485( RX_EN );  //enable rs485 rx 
+ 224   1      }
+ 225             
+ 226             
+ 227             
+ 228             
+ 229             
+ 230             
+ 231             
+ 232             
+ 233             
+ 234             
+ 235             
+*** WARNING C291 IN LINE 68 OF BSP\FEEDBACK.C: not every exit path returns a value
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V9.00   FEEDBACK                                                              07/31/2013 11:07:31 PAGE 5   
+
+   CODE SIZE        =    681    ----
+   CONSTANT SIZE    =      4    ----
+   XDATA SIZE       =    128      19
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       2
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

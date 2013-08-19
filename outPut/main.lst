@@ -1,0 +1,364 @@
+C51 COMPILER V9.00   MAIN                                                                  07/31/2013 11:13:54 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\outPut\main.obj
+COMPILER INVOKED BY: D:\keil\C51\BIN\C51.EXE app\main.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PR
+                    -INT(.\outPut\main.lst) TABS(2) PREPRINT(.\outPut\main.i) OBJECT(.\outPut\main.obj)
+
+line level    source
+
+   1          /************************************
+   2          * Platform: STC12LE5620AD(STC12C5620AD) flash:28k sram:768B=512B(aux)+256B(内部) 
+   3          *           Voltage:3.6v~2.2v 
+   4          * KEIL: V4.7
+   5          * Frequency: 11.05892MHz
+   6          * Board: HDMI-TO-SDI(BRUCE)
+   7          ************************************/
+   8          
+   9          #include "reg52.h"
+  10          #include "uart.h"
+  11          #include "typedef.h"
+  12          #include "io.h"
+  13          #include "ep9132.h"
+  14          #include "CommonLibrary.h"
+  15          #include "intrins.h"
+  16          #include "string.h"   //memeset@
+  17          #include "feedback.h"
+  18          
+  19          static void cmdProcess(void);  //命令处理
+  20          
+  21          #define MAX_CMD_LEN 150
+  22          
+  23          
+  24          
+  25          
+  26          unsigned char childBoardAddr = 0;
+  27          
+  28          unsigned char timeOutFlag = 0;
+  29          
+  30          static struct cmdStrType{ //解析背板命令
+  31            unsigned char cmdPos;
+  32            unsigned char cmdLen;
+  33            unsigned char cmdStep;
+  34            unsigned char cmd;
+  35            unsigned char addr;
+  36            unsigned char cmdXor;
+  37            //unsigned char isBoardCast; 
+  38            unsigned char cmdBuf[MAX_CMD_LEN];
+  39          }cmdStr;
+  40          /*
+  41          ***********************************************************
+  42          * 解析背板命令结构体清0
+  43          ***********************************************************
+  44          */
+  45          static void comCmdInit(void)
+  46          {
+  47   1          memset( &cmdStr,0,sizeof(struct cmdStrType) );
+  48   1      }
+  49          
+  50          static struct uartStr{   //feed back to back plane
+  51            unsigned char cmdHead;
+  52            unsigned char addr;
+  53            unsigned char cmd;
+  54            unsigned char dataLen;
+C51 COMPILER V9.00   MAIN                                                                  07/31/2013 11:13:54 PAGE 2   
+
+  55            unsigned char *dataBuff;  
+  56          };
+  57          
+  58          //**********************************************
+  59          // Description :定时器0初始化,70ms定时
+  60          // Argument    :none
+  61          // Return      :none
+  62          // Note        :注意是1T时钟周期 11.0592MHz
+  63          //**********************************************
+  64          void Init_T0(void)
+  65          {
+  66   1        AUXR &= 0x7f; //定时器时钟12T模式
+  67   1        
+  68   1        TMOD &= 0xF0; //清定时器0模式,不改变timer1设置
+  69   1        TMOD |= 0x01;  //set timer0 as mode1(16-bit)
+  70   1        TH0  = 0x04;
+  71   1        TL0  = 0x00; //70ms
+  72   1      //    TL0 = 0xF7;   
+  73   1      //    TH0 = 0xFF;  //10uS
+  74   1        TF0  = 0; //clear TF0 Flag
+  75   1        
+  76   1        EA   = 1;  //open global interrupt switch
+  77   1        ET0  = 1;  //enable timer0 interrupt
+  78   1        //TR0  = 1;  //T0 start
+  79   1      }
+  80          
+  81          
+  82          //**********************************************
+  83          // Description :定时器0 ISR
+  84          // Argument    :none
+  85          // Return      :none
+  86          // Note        :注意中断向量号为 1
+  87          //**********************************************
+  88          //void Time0_ISR(void)  interrupt 1   
+  89          //{ 
+  90          //  TR0= 0;
+  91          //  LED1 = 1; 
+  92          //  TH0 = 0x04; //reload value
+  93          //  TL0 = 0x0;  
+  94          ////  TL0 = 0xF7;   
+  95          ////    TH0 = 0xFF;  //10uS
+  96          //  timeOutFlag = 1;
+  97          //}
+  98          
+  99          //**********************************************
+ 100          // Description :解析背板命令
+ 101          // Argument    :none
+ 102          // Return      :none
+ 103          // Note        :
+ 104          //**********************************************
+ 105          static void cmdCheckProc(void)
+ 106          {  
+ 107   1         unsigned tmpChar;
+ 108   1        
+ 109   1         while(1)
+ 110   1         {
+ 111   2      //      if(com0CheckRx() == 0)
+ 112   2      //      {
+ 113   2      //        if( timeOutFlag == 1 )
+ 114   2      //        {
+ 115   2      //          comCmdInit();
+ 116   2      //          TR0= 0;
+C51 COMPILER V9.00   MAIN                                                                  07/31/2013 11:13:54 PAGE 3   
+
+ 117   2      //          //sendByte(0xff);
+ 118   2      //          timeOutFlag = 5;
+ 119   2      //        }
+ 120   2      //        else if( timeOutFlag == 0 ) {
+ 121   2      //          TH0  = 0x04;   //re-load 
+ 122   2      //          TL0  = 0x00;
+ 123   2      //          TR0  = 1;      //T0 start
+ 124   2      //          timeOutFlag = 2;
+ 125   2      //        }
+ 126   2      //        return;
+ 127   2      //      } 
+ 128   2      //      else
+ 129   2      //      {
+ 130   2      //        TR0 = 0;
+ 131   2      //        TH0  = 0x04;   //re-load 
+ 132   2      //        TL0  = 0x00;
+ 133   2      //        timeOutFlag=0;
+ 134   2      //      }
+ 135   2            
+ 136   2            if( com0CheckRx() == 0) break;
+ 137   2            tmpChar = com0GetChar();
+ 138   2            
+ 139   2            switch(cmdStr.cmdStep)
+ 140   2            {
+ 141   3              case 0:          //包头
+ 142   3                 if( tmpChar != CMD_HEAD ) break;
+ 143   3                   cmdStr.cmdStep++;
+ 144   3                   //cmdStr.cmdXor = 0;
+ 145   3                   cmdStr.cmdXor += tmpChar; //
+ 146   3                   cmdStr.cmdPos = 0;
+ 147   3                   //sendByte(0x31);
+ 148   3                   continue;
+ 149   3              case 1:        //地址
+ 150   3                   //if( tmpChar == 0xFF ) //broadcast
+ 151   3                   //isBoardCast = 1;
+ 152   3                   cmdStr.addr = tmpChar;
+ 153   3                   cmdStr.cmdXor += tmpChar; //
+ 154   3                   cmdStr.cmdStep++;
+ 155   3                   //sendByte(0x32);
+ 156   3                   break;        
+ 157   3              case 2:           //指令
+ 158   3                   cmdStr.cmd = tmpChar; //cmd type
+ 159   3                   cmdStr.cmdXor += tmpChar; //
+ 160   3                   cmdStr.cmdStep++;
+ 161   3                   //sendByte(0x33);
+ 162   3                   break;
+ 163   3              case 3:           //数据长度
+ 164   3                   if( (tmpChar > MAX_CMD_LEN) | (tmpChar == 0) )
+ 165   3                      { comCmdInit(); break;} 
+ 166   3                   cmdStr.cmdLen = tmpChar;
+ 167   3                   cmdStr.cmdXor += tmpChar; //
+ 168   3                   cmdStr.cmdStep++;
+ 169   3                   //sendByte(0x34);
+ 170   3                   break;           
+ 171   3              case 4:       //数据内容
+ 172   3                   if( cmdStr.cmdPos < cmdStr.cmdLen )
+ 173   3                   {
+ 174   4                      cmdStr.cmdBuf[cmdStr.cmdPos] = tmpChar;
+ 175   4                      cmdStr.cmdXor += tmpChar; //
+ 176   4                      cmdStr.cmdPos++;
+ 177   4                      if( cmdStr.cmdPos >= cmdStr.cmdLen )//cmd content receiving is complete
+ 178   4                        cmdStr.cmdStep++;  
+C51 COMPILER V9.00   MAIN                                                                  07/31/2013 11:13:54 PAGE 4   
+
+ 179   4                      //sendByte(0x35);               
+ 180   4                      break;                
+ 181   4                   }
+ 182   3                   else
+ 183   3                   { comCmdInit(); break; } 
+ 184   3              case 5:
+ 185   3                   if( cmdStr.cmdXor != tmpChar ) //异或校验出错
+ 186   3                   { sendByte(0x36); 
+ 187   4                     memoryInit();
+ 188   4                     comCmdInit();break; }  
+ 189   3                   else
+ 190   3                   { //sendByte(0x37);
+ 191   4                     cmdProcess(); comCmdInit();//break;
+ 192   4                   }
+ 193   3                   
+ 194   3              default:
+ 195   3                   cmdStr.cmdXor = 0;
+ 196   3                   cmdStr.cmdPos = 0; 
+ 197   3              
+ 198   3                   cmdStr.cmdStep = 0;  
+ 199   3                   break;      
+ 200   3            }break;
+ 201   2         }
+ 202   1      }
+ 203          
+ 204          //**********************************************
+ 205          // Description :命令处理
+ 206          // Argument    :none
+ 207          // Return      :none
+ 208          // Note        :
+ 209          //**********************************************
+ 210          static void cmdProcess(void)  //暂时不判断从机地址
+ 211          {
+ 212   1         unsigned char CardCS = (P2&0x08); //read cs pin  0:active
+ 213   1         if( 0x08 == CardCS )                 //no cs
+ 214   1         {;}
+ 215   1           
+ 216   1         else
+ 217   1         {
+ 218   2            //sendByte('a');
+ 219   2           
+ 220   2            switch(cmdStr.cmd)
+ 221   2            {
+ 222   3               case CMD_SET_ADDR:          //设置卡板地址
+ 223   3                    childBoardAddr = cmdStr.cmdBuf[0];
+ 224   3                    uartReturn(childBoardAddr);  
+ 225   3                    break;
+ 226   3               case CMD_CHECK_PORT_TYPE:   //查询卡板类型
+ 227   3                    sendPortType(cmdStr.addr,portTypeArray);
+ 228   3                    //sendByte('b');
+ 229   3                    break;
+ 230   3               case CMD_GET_EDID_FRONT128:           //读取EDID前128字节
+ 231   3                    //checkPortType(cmdStr.cmdBuf[0]); //检查端口类型是否支持EDID功能
+ 232   3                    if(checkPortType(cmdStr.cmdBuf[0]))            //若端口支持EDID功能
+ 233   3                  {
+ 234   4                     // sendByte('C');
+ 235   4                     //checkConnection(cmdStr.cmdBuf[0]);       //检查端口是否连接
+ 236   4                     if( checkConnection(cmdStr.cmdBuf[0]) )
+ 237   4                     {
+ 238   5                       //sendByte(checkConnection(cmdStr.cmdBuf[0])+0x30);
+ 239   5                       ddcChannelSel( cmdStr.cmdBuf[0] );       //选择相应port的DDC Channel
+ 240   5                       //edidRead1();                           //read前128字节
+C51 COMPILER V9.00   MAIN                                                                  07/31/2013 11:13:54 PAGE 5   
+
+ 241   5                       if( 1 == edidRead1() )                   //读取成功
+ 242   5                       
+ 243   5                         feedBackEdid(cmdStr.cmd,cmdStr.addr,0x0,edidBuff);
+ 244   5                       else {
+ 245   6                          memset(edidBuff,0,128);
+ 246   6                         
+ 247   6                          feedBackEdid(cmdStr.cmd,cmdStr.addr,0x03,edidBuff); //读取失败    
+ 248   6                        }                    
+ 249   5                     }
+ 250   4                     
+ 251   4                     else{
+ 252   5                       memset(edidBuff,0,128);
+ 253   5                      
+ 254   5                       feedBackEdid(cmdStr.cmd,cmdStr.addr,0x01,edidBuff);        //端口没有连接
+ 255   5                     }
+ 256   4                       
+ 257   4                  }
+ 258   3                    else{                        //端口不支持EDID功能
+ 259   4                      //sendByte('C');
+ 260   4                     memset(edidBuff,0,128);
+ 261   4                    
+ 262   4                     feedBackEdid(cmdStr.cmd,cmdStr.addr,0x02,edidBuff);
+ 263   4                    }
+ 264   3                    break;
+ 265   3               case CMD_GET_EDID_REAR128:  //读取EDID后128字节
+ 266   3                     
+ 267   3                    if(checkPortType(cmdStr.cmdBuf[0]))            //若端口支持EDID功能
+ 268   3                    {
+ 269   4                       // sendByte('C');
+ 270   4                       //checkConnection(cmdStr.cmdBuf[0]);       //检查端口是否连接
+ 271   4                       if( checkConnection(cmdStr.cmdBuf[0]) )
+ 272   4                       {
+ 273   5                         //sendByte(checkConnection(cmdStr.cmdBuf[0])+0x30);
+ 274   5                         ddcChannelSel( cmdStr.cmdBuf[0] );       //选择相应port的DDC Channel
+ 275   5                         //edidRead2();                           //read后128字节
+ 276   5                         if( 1 == edidRead2() )                   //读取成功
+ 277   5                           feedBackEdid(cmdStr.cmd,cmdStr.addr,0x0,edidBuff);
+ 278   5                         else {
+ 279   6                            memset(edidBuff,0,128);
+ 280   6                            
+ 281   6                            feedBackEdid(cmdStr.cmd,cmdStr.addr,0x03,edidBuff); //读取失败    
+ 282   6                          }                    
+ 283   5                       }
+ 284   4                       else{
+ 285   5                         memset(edidBuff,0,128);
+ 286   5                        
+ 287   5                         feedBackEdid(cmdStr.cmd,cmdStr.addr,0x01,edidBuff);        //端口没有连接
+ 288   5                       }
+ 289   4                         
+ 290   4                    }
+ 291   3                    else{                        //端口不支持EDID功能
+ 292   4                      //sendByte('C');
+ 293   4                     memset(edidBuff,0,128);  
+ 294   4                     feedBackEdid(cmdStr.cmd,cmdStr.addr,0x02,edidBuff);
+ 295   4                    }         
+ 296   3                  
+ 297   3                    break;
+ 298   3               default: break;         
+ 299   3            }
+ 300   2         }
+ 301   1         
+ 302   1      }
+C51 COMPILER V9.00   MAIN                                                                  07/31/2013 11:13:54 PAGE 6   
+
+ 303          /**************just for test*******************/
+ 304          void cmdProcess1(void)
+ 305          {
+ 306   1         sendByte('a');
+ 307   1      }
+ 308          
+ 309          void main(void)
+ 310          {
+ 311   1        setRS485( RX_EN );  //enable rs485 rx
+ 312   1        urInit();    //串口初始化
+ 313   1        //SendString("HDMI8X8\n");
+ 314   1        
+ 315   1        BoardInit(); //相关IC及MCU端口初始化
+ 316   1        //Init_T0();
+ 317   1        comCmdInit();//串口命令解析控制结构体清0  
+ 318   1        //WDT_CONTR = 0x35;  //2.2755S
+ 319   1      //  Delay_ms(1000);
+ 320   1      //  LED2 = 1;
+ 321   1      //  Delay_ms(3000);
+ 322   1        while(1)
+ 323   1        {
+ 324   2      //      setRS485( RX_EN );  //enable rs485 rx
+ 325   2            cmdCheckProc();
+ 326   2          //  WDT_CONTR = 0x35;  //2.2755S
+ 327   2        }
+ 328   1        
+ 329   1      
+ 330   1      }  
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    633    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    158       2
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

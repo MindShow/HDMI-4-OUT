@@ -1,0 +1,1 @@
+"sii9135\SiITTVideo.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\SiITTVideo.lst) TABS (2) PREPRINT(.\outPut\SiITTVideo.i) OBJECT(.\outPut\SiITTVideo.obj)

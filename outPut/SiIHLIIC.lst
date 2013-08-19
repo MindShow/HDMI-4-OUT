@@ -1,0 +1,82 @@
+C51 COMPILER V9.51   SIIHLIIC                                                              05/29/2013 17:36:11 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIHLIIC
+OBJECT MODULE PLACED IN .\outPut\SiIHLIIC.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIHLIIC.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTE
+                    -XTEND PRINT(.\outPut\SiIHLIIC.lst) TABS(2) PREPRINT(.\outPut\SiIHLIIC.i) OBJECT(.\outPut\SiIHLIIC.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   3          //
+   4          // No part of this work may be reproduced, modified, distributed, transmitted,
+   5          // transcribed, or translated into any language or computer format, in any form
+   6          // or by any means without written permission of: Silicon Image, Inc.,
+   7          // 1060 East Arques Avenue, Sunnyvale, California 94085
+   8          //------------------------------------------------------------------------------
+   9          
+  10          #include "SiITypeDefs.h"
+  11          #include "UCom.h"
+  12          #ifndef _HLVIIC_
+  13          #define _HLVIIC_
+  14          
+  15          #define IIC_CAPTURED  1
+  16          #define IIC_NOACK     2
+  17          #define MDDC_CAPTURED 3
+  18          #define MDDC_NOACK    4
+  19          #define MDDC_FIFO_FULL  5
+  20          #define IIC_OK 0
+  21          
+  22          #define RX_SLV0 0x60
+  23          #define RX_SLV1 0x68
+  24          
+  25          #define SET 1
+  26          #define CLR 0
+  27          
+  28          #define MDDC_BUS 2
+  29          
+  30          
+  31          
+  32          typedef struct {
+  33          
+  34              BYTE SlaveAddr;
+  35              BYTE Flags;
+  36              BYTE NBytes;
+  37              BYTE RegAddrL;
+  38              BYTE RegAddrH;
+  39          
+  40          } I2CShortCommandType;
+  41          
+  42          
+  43          BYTE hlBlockRead_8BAS ( I2CShortCommandType * , BYTE * );
+  44          BYTE hlBlockWrite_8BAS ( I2CShortCommandType * , BYTE * );
+  45          BYTE hlReadByte_8BA ( BYTE, BYTE);
+  46          WORD hlReadWord_8BA ( BYTE , BYTE);
+  47          void hlWriteWord_8BA ( BYTE , BYTE, WORD );
+  48          void hlWriteByte_8BA ( BYTE , BYTE, BYTE );
+  49          BOOL hlWaitForAck ( BYTE , WORD );
+  50          BYTE hlWriteAddr_8BA ( BYTE , BYTE);
+  51          
+  52          
+  53          
+  54          
+C51 COMPILER V9.51   SIIHLIIC                                                              05/29/2013 17:36:11 PAGE 2   
+
+  55          #endif
+  56          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   ----    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

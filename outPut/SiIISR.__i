@@ -1,0 +1,1 @@
+"sii9135\SiIISR.c" LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXTEND PRINT(.\outPut\SiIISR.lst) TABS (2) PREPRINT(.\outPut\SiIISR.i) OBJECT(.\outPut\SiIISR.obj)

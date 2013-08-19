@@ -1,0 +1,397 @@
+C51 COMPILER V9.51   SIIINFOPKTS                                                           05/29/2013 17:36:11 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIINFOPKTS
+OBJECT MODULE PLACED IN .\outPut\SiIInfoPkts.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIInfoPkts.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJE
+                    -CTEXTEND PRINT(.\outPut\SiIInfoPkts.lst) TABS(2) PREPRINT(.\outPut\SiIInfoPkts.i) OBJECT(.\outPut\SiIInfoPkts.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiIInfoPkts
+   3          //
+   4          // Module Description: Processing Info Frame/Packets Interrupts
+   5          //
+   6          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   7          //
+   8          // No part of this work may be reproduced, modified, distributed, transmitted,
+   9          // transcribed, or translated into any language or computer format, in any form
+  10          // or by any means without written permission of: Silicon Image, Inc.,
+  11          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  12          //------------------------------------------------------------------------------
+  13          
+  14          #include <stdio.h>
+  15          
+  16          #include "SiIInfoPkts.h"
+  17          #include "SiIRXIO.h"
+  18          #include "SiITTVideo.h"
+  19          #include "SiIRXAPIDefs.h"
+  20          #include "SiItrace.h"
+  21          #include "SiIGlob.h"
+  22          
+  23          //------------------------------------------------------------------------------
+  24          // Function Name: Check_CheckSum
+  25          // Function Description: checks Info Frame Check Sum
+  26          //------------------------------------------------------------------------------
+  27          static BOOL Check_CheckSum( BYTE bTotInfoFrameLength , BYTE * pbInfoData ){
+  28   1      BOOL qResult = FALSE;
+  29   1      BYTE i, bCheckSum = 0;
+  30   1      
+  31   1          for ( i = 0; i < bTotInfoFrameLength; i++ )
+  32   1              bCheckSum += pbInfoData[i];
+  33   1          if ( !bCheckSum )
+  34   1              qResult = TRUE;
+  35   1      
+  36   1          return qResult;
+  37   1      
+  38   1      }
+  39          //------------------------------------------------------------------------------
+  40          // Function Name: GetPacketTypeAndAddr
+  41          // Function Description: used to get Info Frame/Packet type and address
+  42          //------------------------------------------------------------------------------
+  43          static InfoFrPktType GetPacketTypeAndAddr( BYTE bMaskedIntrrupt ) {
+  44   1      InfoFrPktType InfoFrmPkt;
+  45   1      /*YMA revised as by Japan customer
+  46   1      
+  47   1          switch ( bMaskedIntrrupt ){
+  48   1      
+  49   1              case AVI_Mask:      InfoFrmPkt.bAddr = RX_AVI_IF_ADDR;
+  50   1                  break;
+  51   1              case SPD_Mask:      InfoFrmPkt.bAddr = RX_SPD_IF_ADDR;
+  52   1                  break;
+  53   1              case Audio_Mask:    InfoFrmPkt.bAddr = RX_AUD_IF_ADDR;
+  54   1                  break;
+C51 COMPILER V9.51   SIIINFOPKTS                                                           05/29/2013 17:36:11 PAGE 2   
+
+  55   1              case MPEG_Mask:     InfoFrmPkt.bAddr = RX_MPEG_IF_ADDR;
+  56   1                  break;
+  57   1              case Unknown_Mask:  InfoFrmPkt.bAddr = RX_UNKNOWN_IF_ADDR;
+  58   1                  break;
+  59   1              case ACP_Mask:      InfoFrmPkt.bAddr = RX_ACP_IP_ADDR;
+  60   1                  break;
+  61   1              default:   InfoFrmPkt.bType = 0;
+  62   1          }
+  63   1          InfoFrmPkt.bType = siiReadByteHDMIRXP1( InfoFrmPkt.bAddr );
+  64   1          return InfoFrmPkt;
+  65   1      */
+  66   1          InfoFrmPkt.bType = 0;
+  67   1          InfoFrmPkt.bAddr = 0;
+  68   1       
+  69   1          switch ( bMaskedIntrrupt){
+  70   2       
+  71   2             case AVI_Mask:      InfoFrmPkt.bAddr = RX_AVI_IF_ADDR;
+  72   2                 break;
+  73   2             case SPD_Mask:      InfoFrmPkt.bAddr = RX_SPD_IF_ADDR;
+  74   2                 break;
+  75   2             case Audio_Mask:    InfoFrmPkt.bAddr = RX_AUD_IF_ADDR;
+  76   2                 break;
+  77   2             case MPEG_Mask:     InfoFrmPkt.bAddr = RX_MPEG_IF_ADDR;
+  78   2                 break;
+  79   2             case Unknown_Mask:  InfoFrmPkt.bAddr = RX_UNKNOWN_IF_ADDR;
+  80   2                 break;
+  81   2             case ACP_Mask:      InfoFrmPkt.bAddr = RX_ACP_IP_ADDR;
+  82   2                 break;
+  83   2              
+  84   2          }
+  85   1          if ( InfoFrmPkt.bAddr )
+  86   1             InfoFrmPkt.bType = siiReadByteHDMIRXP1( InfoFrmPkt.bAddr );
+  87   1          return InfoFrmPkt;
+  88   1      
+  89   1      }
+  90          //------------------------------------------------------------------------------
+  91          // Function Name: CheckForInfoFrameLength
+  92          // Function Description: check if Info Frame length in normal range
+  93          //------------------------------------------------------------------------------
+  94          static BOOL CheckForInfoFrameLength( BYTE bInfoFrameLenth ){
+  95   1      BOOL qResult = FALSE;
+  96   1      
+  97   1          if ( (bInfoFrameLenth >= IF_MIN_LENGTH) && (bInfoFrameLenth <= IF_MAX_LENGTH))
+  98   1              qResult = TRUE;
+  99   1          return qResult;
+ 100   1      
+ 101   1      }
+ 102          //------------------------------------------------------------------------------
+ 103          // Function Name:  siiClearNewPacketEvent
+ 104          // Function Description: After reading Packet through API interface, it's need to
+ 105          //                       clear that Event of packet. Otherwise top layer would read it again
+ 106          // Accepts: none
+ 107          // Returns: none
+ 108          // Globals: none
+ 109          //------------------------------------------------------------------------------
+ 110          void siiClearNewPacketEvent ( BYTE bPaketType ) {
+ 111   1      
+ 112   1          switch ( bPaketType ){
+ 113   2      
+ 114   2              case AVI_Type:      SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_AVI);      break;
+ 115   2              case SPD_Type:      SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_SPD);      break;
+ 116   2              case Audio_Type:    SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_AUD);      break;
+C51 COMPILER V9.51   SIIINFOPKTS                                                           05/29/2013 17:36:11 PAGE 3   
+
+ 117   2              case ISRC1_Type:    SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_ISRC1);    break;
+ 118   2              case ISRC2_Type:    SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_ISRC2);    break;
+ 119   2              case ACP_Type:      SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_ACP);      break;
+ 120   2      
+ 121   2          }
+ 122   1      }
+ 123          //------------------------------------------------------------------------------
+ 124          // Function Name: GetInfoFramesOrPakets
+ 125          // Function Description: gets Info Frames or Packets, if Info Frame check for its length
+ 126          //                       and check sum
+ 127          //------------------------------------------------------------------------------
+ 128          static BYTE GetInfoFramesOrPakets( InfoFrPktType InfoFrPkt, BYTE * pbInfoData ){
+ 129   1      BYTE bECode = FALSE, bMaxNBytes = 0;
+ 130   1      BOOL qInfoFrame = TRUE;
+ 131   1      
+ 132   1      
+ 133   1          switch ( InfoFrPkt.bType ){
+ 134   2              case AVI_Type:    bMaxNBytes = 19;
+ 135   2                  break;
+ 136   2              case MPEG_Type:
+ 137   2              case SPD_Type:    bMaxNBytes = 31;
+ 138   2                  break;
+ 139   2              case Audio_Type:  bMaxNBytes = 14;
+ 140   2                  break;
+ 141   2              case ISRC1_Type:
+ 142   2              case ISRC2_Type:
+ 143   2              case ACP_Type:
+ 144   2                  qInfoFrame = FALSE; bMaxNBytes = 31;
+ 145   2                  break;
+ 146   2      
+ 147   2          }
+ 148   1      
+ 149   1          siiReadBlockHDMIRXP1( InfoFrPkt.bAddr, bMaxNBytes, pbInfoData );
+ 150   1      
+ 151   1          if ( qInfoFrame ) {
+ 152   2              if ( CheckForInfoFrameLength( pbInfoData[ IF_LENGTH_INDEX ] ) ){
+ 153   3                  if ( !Check_CheckSum( pbInfoData[ IF_LENGTH_INDEX ] + IF_HEADER_LENGTH, pbInfoData ) )
+ 154   3                      bECode = SiI_EC_InfoFrameWrongCheckSum;
+ 155   3              }
+ 156   2              else bECode = SiI_EC_InfoFrameWrongLength;
+ 157   2          }
+ 158   1      
+ 159   1          return bECode;
+ 160   1      // TODO think how differentiate from another errors ( because getting these errors is a source fault)
+ 161   1      }
+ 162          //------------------------------------------------------------------------------
+ 163          // Function Name: GetInfoPacketAddress
+ 164          // Function Description:  returns address in SiI RX where Packet data were placed
+ 165          //------------------------------------------------------------------------------
+ 166          BYTE GetInfoPacketAddress ( BYTE bType ){
+ 167   1      BYTE bAddr;
+ 168   1      
+ 169   1          switch ( bType ){
+ 170   2      
+ 171   2              case AVI_Type:      bAddr = RX_AVI_IF_ADDR;
+ 172   2                  break;
+ 173   2              case SPD_Type:      bAddr = RX_SPD_IF_ADDR;
+ 174   2                  break;
+ 175   2              case Audio_Type:    bAddr = RX_AUD_IF_ADDR;
+ 176   2                  break;
+ 177   2              case ISRC1_Type:    bAddr = RX_MPEG_IF_ADDR;
+ 178   2                  break;
+C51 COMPILER V9.51   SIIINFOPKTS                                                           05/29/2013 17:36:11 PAGE 4   
+
+ 179   2              case ISRC2_Type:    bAddr = RX_UNKNOWN_IF_ADDR;
+ 180   2                  break;
+ 181   2              case ACP_Type:      bAddr = RX_ACP_IP_ADDR;
+ 182   2                  break;
+ 183   2              default:   bAddr = 0;
+ 184   2          }
+ 185   1          return bAddr;
+ 186   1      }
+ 187          //------------------------------------------------------------------------------
+ 188          // Function Name: siiGetInfoPacket
+ 189          // Function Description: get packet from
+ 190          //
+ 191          // Accepts: BYTE InfoPacketType
+ 192          // Returns: BYTE *, InfoPacketData
+ 193          // Globals: none
+ 194          //------------------------------------------------------------------------------
+ 195          void siiGetInfoPacket ( BYTE bInfoPacketType, BYTE * pbInfoPacket ){
+ 196   1      BYTE bInfoPacketAddress;
+ 197   1      InfoFrPktType InfoFrmPkt;
+ 198   1      
+ 199   1          bInfoPacketAddress = GetInfoPacketAddress ( bInfoPacketType );
+ 200   1          if( bInfoPacketAddress ){
+ 201   2              InfoFrmPkt.bType = bInfoPacketType;
+ 202   2              InfoFrmPkt.bAddr = bInfoPacketAddress;
+ 203   2              GetInfoFramesOrPakets( InfoFrmPkt, pbInfoPacket );
+ 204   2          }
+ 205   1      
+ 206   1      }
+ 207          //------------------------------------------------------------------------------
+ 208          // Function Name: siiGetVIC
+ 209          // Function Description: get VIC code from AVI packet
+ 210          //
+ 211          // Accepts: void
+ 212          // Returns: BYTE
+ 213          // Globals: none
+ 214          //------------------------------------------------------------------------------
+ 215          BYTE siiGetVIC ( void ) {
+ 216   1          return siiReadByteHDMIRXP1 ( RX_AVI_IF_ADDR + 7);
+ 217   1      }
+ 218          //------------------------------------------------------------------------------
+ 219          // Function Name:  SetAVI_Info
+ 220          // Function Description:  fill in AVI information in SiI_Inf global strucute
+ 221          //------------------------------------------------------------------------------
+ 222          static void SetAVI_Info( AVIType * AVI, BYTE * Data ){
+ 223   1      BYTE bAVI;
+ 224   1      
+ 225   1          AVI->bAVI_State = SiI_RX_GotAVI;
+ 226   1      
+ 227   1          SiI_Inf.bGlobStatus &= (~SiI_RX_GlobalHDMI_NoAVIPacket);
+ 228   1      
+ 229   1          bAVI = Data[IF_HEADER_LENGTH] & ColorSpaceMask;
+ 230   1          if ( bAVI == RGB )
+ 231   1              AVI->bInputColorSpace = SiI_RX_ICP_RGB;
+ 232   1          else if ( bAVI == YCbCr422 )
+ 233   1              AVI->bInputColorSpace = SiI_RX_ICP_YCbCr422;
+ 234   1          else if ( bAVI == YCbCr444 )
+ 235   1              AVI->bInputColorSpace = SiI_RX_ICP_YCbCr444;
+ 236   1      
+ 237   1          bAVI = Data[IF_HEADER_LENGTH + 1] & ColorimetryMask;
+ 238   1          if ( bAVI == NoInfo )
+ 239   1              AVI->bColorimetry = SiI_RX_ColorimetryNoInfo;
+ 240   1          else if ( bAVI == ITU601 )
+C51 COMPILER V9.51   SIIINFOPKTS                                                           05/29/2013 17:36:11 PAGE 5   
+
+ 241   1              AVI->bColorimetry = SiI_RX_ITU_601;
+ 242   1          else if ( bAVI == ITU709 )
+ 243   1              AVI->bColorimetry = SiI_RX_ITU_709;
+ 244   1      
+ 245   1          AVI->bPixRepl = Data[IF_HEADER_LENGTH + 4] & PixReplicationMask;
+ 246   1      
+ 247   1      
+ 248   1      }
+ 249          //------------------------------------------------------------------------------
+ 250          // Function Name: ClearAVI_Info
+ 251          // Function Description: write default AVI information in SiI_Inf global strucute
+ 252          //------------------------------------------------------------------------------
+ 253          void siiClearAVI_Info( AVIType * AVI ){
+ 254   1      
+ 255   1          SiI_Inf.bGlobStatus |= SiI_RX_GlobalHDMI_NoAVIPacket;
+ 256   1          SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_AVI);
+ 257   1          AVI->bAVI_State = SiI_RX_NoAVI;
+ 258   1          AVI->bInputColorSpace = SiI_RX_ICP_RGB;
+ 259   1          AVI->bColorimetry = SiI_RX_ColorimetryNoInfo;
+ 260   1          AVI->bPixRepl = 0;
+ 261   1      
+ 262   1      }
+ 263          //------------------------------------------------------------------------------
+ 264          // Function Name: ProcessAVIorNoAVI
+ 265          // Function Description: processing AVI and NoAVI interrupts
+ 266          //------------------------------------------------------------------------------
+ 267          static void ProcessAVIorNoAVI( BYTE bInfoFramesIntrrupts ){
+ 268   1      BYTE abInfoData[19];
+ 269   1      BYTE bECode;
+ 270   1      InfoFrPktType InfoFrmPkt;
+ 271   1      
+ 272   1          if ( bInfoFramesIntrrupts &  AVI_Mask ){
+ 273   2              InfoFrmPkt = GetPacketTypeAndAddr( bInfoFramesIntrrupts & AVI_Mask);
+ 274   2              if( InfoFrmPkt.bType ){
+ 275   3                  bECode = GetInfoFramesOrPakets( InfoFrmPkt, abInfoData );
+ 276   3                  if ( !bECode ){
+ 277   4                      SetAVI_Info( &SiI_Inf.AVI, abInfoData );
+ 278   4                      siiMuteVideoAndSetSM_SyncInChange();    // Request Program Video path
+ 279   4                      SiI_Inf.bNewInfoPkts |= SiI_RX_NewInfo_AVI; // Set Sys Information Flag
+ 280   4      #ifdef SII_DUMP_UART
+ 281   4                      printf ("\nNew AVI\n");
+ 282   4      #endif
+ 283   4                  }
+ 284   3              }
+ 285   2          }
+ 286   1          if (  bInfoFramesIntrrupts &  NoAVI_Mask ){
+ 287   2              siiClearAVI_Info( &SiI_Inf.AVI );
+ 288   2              siiMuteVideoAndSetSM_SyncInChange();
+ 289   2              SiI_Inf.bNewInfoPkts &= (~SiI_RX_NewInfo_AVI);
+ 290   2          }
+ 291   1      }
+ 292          //------------------------------------------------------------------------------
+ 293          // Function Name: ProcessAudioInfoFrame
+ 294          // Function Description: processing Audio Info Frame
+ 295          //------------------------------------------------------------------------------
+ 296          static void ProcessAudioInfoFrame( BYTE bInfoFramesIntrrupts ){
+ 297   1      BYTE bECode;
+ 298   1      BYTE abInfoData[14];
+ 299   1      InfoFrPktType InfoFrmPkt;
+ 300   1      
+ 301   1          InfoFrmPkt = GetPacketTypeAndAddr( bInfoFramesIntrrupts & AUD_MASK);
+ 302   1          if ( InfoFrmPkt.bType ){
+C51 COMPILER V9.51   SIIINFOPKTS                                                           05/29/2013 17:36:11 PAGE 6   
+
+ 303   2              bECode = GetInfoFramesOrPakets( InfoFrmPkt, abInfoData );
+ 304   2              if ( !bECode ){
+ 305   3                  SiI_Inf.bNewInfoPkts |= SiI_RX_NewInfo_AUD;  // Set Sys Information Flag
+ 306   3                  // TODO Program input audio status
+ 307   3              }
+ 308   2          }
+ 309   1      }
+ 310          //------------------------------------------------------------------------------
+ 311          // Function Name: Check InfoPacket Buffer
+ 312          // Function Description: This function checks info packet buffer,
+ 313          // sets corresponding flag in SiI_Inf.bNewInfoPkts
+ 314          //------------------------------------------------------------------------------
+ 315          static void CheckIPBuffer( BYTE bMaskedIPIntrrupt ){
+ 316   1      InfoFrPktType InfoFrmPkt;
+ 317   1      
+ 318   1          InfoFrmPkt = GetPacketTypeAndAddr( bMaskedIPIntrrupt );
+ 319   1          if ( InfoFrmPkt.bType == SPD_Type ){
+ 320   2              SiI_Inf.bNewInfoPkts |= SiI_RX_NewInfo_SPD;
+ 321   2          }
+ 322   1          else if ( InfoFrmPkt.bType == ISRC1_Type ){
+ 323   2              SiI_Inf.bNewInfoPkts |= SiI_RX_NewInfo_ISRC1;
+ 324   2          }
+ 325   1          else if ( InfoFrmPkt.bType == ISRC2_Type ){
+ 326   2              SiI_Inf.bNewInfoPkts |= SiI_RX_NewInfo_ISRC2;
+ 327   2          }
+ 328   1          else
+ 329   1              SiI_Inf.bNewInfoPkts |= SiI_RX_NewInfo_UNREQ;
+ 330   1      }
+ 331          
+ 332          //------------------------------------------------------------------------------
+ 333          // Function Name:  siiProcessInfoFrameIntrrupts
+ 334          // Function Description: processing Info Frame and Info Packet Interrupts
+ 335          //
+ 336          // Accepts: none
+ 337          // Returns: none
+ 338          // Globals: SiI_Inf.AVI structure can be modified
+ 339          //------------------------------------------------------------------------------
+ 340          void siiProcessInfoFrameIntrrupts( BYTE bInfoFramesIntrrupts ){
+ 341   1      
+ 342   1      
+ 343   1          if ( ( bInfoFramesIntrrupts &  NoAVI_Mask )||( bInfoFramesIntrrupts &  AVI_Mask) ) { // only AVI in AV
+             -I IF Buffere
+ 344   2              ProcessAVIorNoAVI( bInfoFramesIntrrupts );
+ 345   2          }
+ 346   1          if (  bInfoFramesIntrrupts & Audio_Mask ){               // only Audio in AVI IF Buffere
+ 347   2              ProcessAudioInfoFrame( bInfoFramesIntrrupts );
+ 348   2          }
+ 349   1          if (  bInfoFramesIntrrupts & SPD_Mask ){
+ 350   2              CheckIPBuffer (bInfoFramesIntrrupts & SPD_Mask );
+ 351   2          }
+ 352   1          if (  bInfoFramesIntrrupts & MPEG_Mask ){
+ 353   2              CheckIPBuffer (bInfoFramesIntrrupts & MPEG_Mask );
+ 354   2          }
+ 355   1          if (  bInfoFramesIntrrupts & Unknown_Mask ){
+ 356   2              CheckIPBuffer (bInfoFramesIntrrupts & Unknown_Mask );
+ 357   2          }
+ 358   1      
+ 359   1      }
+ 360          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V9.51   SIIINFOPKTS                                                           05/29/2013 17:36:11 PAGE 7   
+
+   CODE SIZE        =   1112    ----
+   CONSTANT SIZE    =     10    ----
+   XDATA SIZE       =   ----      63
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       3
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

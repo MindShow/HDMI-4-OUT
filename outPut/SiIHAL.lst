@@ -1,0 +1,136 @@
+C51 COMPILER V9.51   SIIHAL                                                                05/29/2013 17:36:10 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIHAL
+OBJECT MODULE PLACED IN .\outPut\SiIHAL.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIHAL.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEXT
+                    -END PRINT(.\outPut\SiIHAL.lst) TABS(2) PREPRINT(.\outPut\SiIHAL.i) OBJECT(.\outPut\SiIHAL.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name:  SiIHAL
+   3          // Module Description: MCU (CPU) Hardware dependent functions have been placed here
+   4          //
+   5          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   6          //
+   7          // No part of this work may be reproduced, modified, distributed, transmitted,
+   8          // transcribed, or translated into any language or computer format, in any form
+   9          // or by any means without written permission of: Silicon Image, Inc.,
+  10          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  11          //------------------------------------------------------------------------------
+  12          #include "SiIHAL.h"
+  13          #include "SiIRXAPIDefs.h"
+  14          #include "SiIGlob.h"
+  15          #include "UGlob.h"
+  16          
+  17          
+  18          WORD wScaleMS;
+  19          
+  20          
+  21          //------------------------------------------------------------------------------
+  22          // Function Name: InitGPIO_Pins
+  23          // Function Description: Configure GPIOs
+  24          //
+  25          // Accepts: none
+  26          // Returns: none
+  27          // Globals: none
+  28          //------------------------------------------------------------------------------
+  29          
+  30          void halInitGPIO_Pins( void ){
+  31   1      
+  32   1          halPowerDownAudioDAC();
+  33   1      //YMA Clear is to activate.
+  34   1        halSetHPD1Pin();
+  35   1        halSetHPD2Pin();
+  36   1      
+  37   1      //    halClearHPD1Pin();
+  38   1      //    halClearHPD2Pin();
+  39   1      }
+  40          //------------------------------------------------------------------------------
+  41          // Function Name:  halDelayMS
+  42          // Function Description: makes Delay in MS
+  43          //
+  44          // Accepts: BYTE, number of milliseconds to be delayed
+  45          // Returns: none
+  46          // Globals: wTicks
+  47          //------------------------------------------------------------------------------
+  48          void halDelayMS ( BYTE MS ){
+  49   1      
+  50   1          wScaleMS = (WORD)( (DWORD) ( MS * 1000 ) / SII_SYS_TICK_TIME ); // the expression can be optimized
+  51   1                                                                // for simple TIME_TICK values
+  52   1          while ( wScaleMS );   // Value is global and decremented by hardware timer
+  53   1      
+  54   1      }
+C51 COMPILER V9.51   SIIHAL                                                                05/29/2013 17:36:10 PAGE 2   
+
+  55          
+  56          //------------------------------------------------------------------------------
+  57          // Function Name: siiGetTicksNumber
+  58          // Function Description:  Get Ticks Number from system timer
+  59          //
+  60          // Accepts: none
+  61          // Returns: wTickCounter
+  62          // Globals: wTicks
+  63          //------------------------------------------------------------------------------
+  64          WORD siiGetTicksNumber( void ){
+  65   1      WORD wTicks;
+  66   1      
+  67   1          do {
+  68   2              wTicks = wTickCounter;
+  69   2      
+  70   2          } while ( wTicks != wTickCounter );  // reading of ticks should be atomic
+  71   1      
+  72   1          return  wTicks;
+  73   1      
+  74   1      }
+  75          
+  76          
+  77          
+  78          //------------------------------------------------------------------------------
+  79          // Function Name: SysTickimerISR
+  80          // Function Description: Timer 0 interrupts,  used to generate 8ms events used for
+  81          //                       executing scheduled tasks
+  82          //------------------------------------------------------------------------------
+  83          #ifdef _8051_
+  84          void SysTickTimerISR( void ) interrupt 1 {
+  85   1      
+  86   1          TF0 = 0;      // Clear Interrupt Flag (8051 specific)
+  87   1      
+  88   1          if ( wScaleMS )
+  89   1              wScaleMS--; // Used to serve MS Delays
+  90   1      
+  91   1      
+  92   1          if ( wTickCounter == wNewTaskTickCounter ) {
+  93   2              wNewTaskTickCounter += TASK_SLOT_IN_TICKS;
+  94   2      
+  95   2              if ( !qReqTasksProcessing ) {
+  96   3                  if ( bNewTaskSlot != LAST_TASK )
+  97   3                      bNewTaskSlot++;
+  98   3                  else
+  99   3                      bNewTaskSlot = 0;
+ 100   3              }
+ 101   2              qReqTasksProcessing = TRUE;
+ 102   2          }
+ 103   1      // Tick counter, used for time measuring
+ 104   1          wTickCounter ++;
+ 105   1      
+ 106   1      }
+ 107          #endif
+ 108          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    182    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =      2    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+C51 COMPILER V9.51   SIIHAL                                                                05/29/2013 17:36:10 PAGE 3   
+
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

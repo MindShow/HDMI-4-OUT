@@ -1,0 +1,89 @@
+C51 COMPILER V9.51   UAUDDAC                                                               05/29/2013 17:35:27 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE UAUDDAC
+OBJECT MODULE PLACED IN .\outPut\uauddac.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\uauddac.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEX
+                    -TEND PRINT(.\outPut\uauddac.lst) TABS(2) PREPRINT(.\outPut\uauddac.i) OBJECT(.\outPut\uauddac.obj)
+
+line level    source
+
+   1          
+   2          /***********************************************************************************/
+   3          /*  Copyright (c) 2002-2005, Silicon Image, Inc.  All rights reserved.             */
+   4          /*  No part of this work may be reproduced, modified, distributed, transmitted,    */
+   5          /*  transcribed, or translated into any language or computer format, in any form   */
+   6          /*  or by any means without written permission of: Silicon Image, Inc.,            */
+   7          /*  1060 East Arques Avenue, Sunnyvale, California 94085                           */
+   8          /***********************************************************************************/
+   9          //------------------------------------------------------------------------------
+  10          // Module Name: UAudDAC
+  11          //
+  12          // Module Description:  this low level driver for Audio DAC Control
+  13          //
+  14          //------------------------------------------------------------------------------
+  15          #include "SiIRXAPIDefs.h"
+  16          #include "UAudDAC.h"
+  17          #include "SiIHAL.h"
+  18          
+  19          //------------------------------------------------------------------------------
+  20          // Function Name: WakeUpAudioDAC
+  21          // Function Description: Wake up Audio DAC
+  22          // Accepts:
+  23          // Returns:
+  24          // Globals:
+  25          //----------------------------------------------------------
+  26          void WakeUpAudioDAC ( void ) {
+  27   1      
+  28   1      
+  29   1          siiWriteByteAudDAC( AUDDAC_SPEED_PD_ADDR, AUDDAC_NORM_OP );
+  30   1      
+  31   1      }
+  32          //------------------------------------------------------------------------------
+  33          // Function Name: PowerDownAudioDAC
+  34          // Function Description: Wake up Audio DAC
+  35          // Accepts:
+  36          // Returns:
+  37          // Globals:
+  38          //----------------------------------------------------------
+  39          void PowerDownAudioDAC( void ){
+  40   1      
+  41   1          siiWriteByteAudDAC( AUDDAC_SPEED_PD_ADDR, AUDDAC_RST );
+  42   1      
+  43   1      }
+  44          //------------------------------------------------------------------------------
+  45          // Function Name: halSetAudioDACMode
+  46          // Function Description: Set Audio DAC modes DSD vs.PCM
+  47          // Accepts:
+  48          // Returns:
+  49          // Globals:
+  50          //----------------------------------------------------------
+  51          void halSetAudioDACMode ( BYTE bMode ) {
+  52   1      
+  53   1          siiWriteByteAudDAC( AUDDAC_SPEED_PD_ADDR, AUDDAC_RST );  // put in reset to be safe
+  54   1        halDelayMS(1);//YAM wait for old data to flush
+C51 COMPILER V9.51   UAUDDAC                                                               05/29/2013 17:35:27 PAGE 2   
+
+  55   1          if( bMode == SiI_RX_AudioRepr_DSD ){
+  56   2              siiWriteByteAudDAC( AUDDAC_CTRL3_ADDR, ADAC_DSD_MODE );
+  57   2          }
+  58   1          else {
+  59   2              siiWriteByteAudDAC( AUDDAC_CTRL3_ADDR, ADAC_PCM_MODE );
+  60   2          }
+  61   1      
+  62   1      }
+  63          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     58    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       1
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

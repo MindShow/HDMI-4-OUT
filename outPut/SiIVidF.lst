@@ -1,0 +1,624 @@
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 1   
+
+
+C51 COMPILER V9.51, COMPILATION OF MODULE SIIVIDF
+OBJECT MODULE PLACED IN .\outPut\SiIVidF.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE sii9135\SiIVidF.c LARGE BROWSE INCDIR(.\app;.\bsp;.\sii9135) DEBUG OBJECTEX
+                    -TEND PRINT(.\outPut\SiIVidF.lst) TABS(2) PREPRINT(.\outPut\SiIVidF.i) OBJECT(.\outPut\SiIVidF.obj)
+
+line level    source
+
+   1          //------------------------------------------------------------------------------
+   2          // Module Name: SiIVidF ( Video Format )
+   3          // ---
+   4          // Module Description: Function of this module are used for setting up output
+   5          //                     format of receiver
+   6          //
+   7          // Copyright © 2002-2005, Silicon Image, Inc.  All rights reserved.
+   8          //
+   9          // No part of this work may be reproduced, modified, distributed, transmitted,
+  10          // transcribed, or translated into any language or computer format, in any form
+  11          // or by any means without written permission of: Silicon Image, Inc.,
+  12          // 1060 East Arques Avenue, Sunnyvale, California 94085
+  13          //------------------------------------------------------------------------------
+  14          
+  15          #include "SiIVidF.h"
+  16          #include "SiIRXDefs.h"
+  17          #include "SiIRXAPIDefs.h"
+  18          #include "SiIRXIO.h"
+  19          #include "SiIGlob.h"
+  20          #include "SiIVidRes.h"
+  21          #include "SiIHDMIRX.h"
+  22          #include "SiITrace.h"
+  23          //------------------------------------------------------------------------------
+  24          // Function Name: siiGetVideoFormatData(...)
+  25          // Function Description: This function reads video format data from control registers
+  26          //
+  27          // Accepts: pointer on Video Format Data
+  28          // Returns: pointer on Video Format Data
+  29          // Globals: none
+  30          //------------------------------------------------------------------------------
+  31          BYTE siiGetVideoFormatData(BYTE * pbVidFormatData){
+  32   1      BYTE bECode = FALSE;
+  33   1      
+  34   1          siiReadBlockHDMIRXP0( RX_VID_FORMAT_BASE_ADDR, 3, pbVidFormatData );
+  35   1          return bECode;
+  36   1      }
+  37          //------------------------------------------------------------------------------
+  38          // Function Name: siiSetVideoFormatData(...)
+  39          // Function Description: This function writes video format data into control registers
+  40          //
+  41          // Accepts: pointer on Video Format Data
+  42          // Returns: pointer on Video Format Data
+  43          // Globals: none
+  44          //------------------------------------------------------------------------------
+  45          BYTE siiSetVideoFormatData(BYTE * pbVidFormatData){
+  46   1      BYTE bECode = FALSE;
+  47   1      
+  48   1          siiWriteBlockHDMIRXP0( RX_VID_FORMAT_BASE_ADDR, 3, pbVidFormatData );
+  49   1          return bECode;
+  50   1      }
+  51          //------------------------------------------------------------------------------
+  52          // Function Name: siiSetVideoPathColorSpaceDependent
+  53          // Function Description:
+  54          //
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 2   
+
+  55          // Accepts:
+  56          // Returns:
+  57          // Globals: none
+  58          //------------------------------------------------------------------------------
+  59          void siiSetVideoPathColorSpaceDependent( BYTE bVideoPath, BYTE bInputColorSpace ){
+  60   1      BYTE bVidFormatData[3];
+  61   1      
+  62   1          siiGetVideoFormatData( bVidFormatData );
+  63   1          siiPrepVideoPathSelect( bVideoPath, bInputColorSpace, bVidFormatData );
+  64   1          siiSetVideoFormatData( bVidFormatData );
+  65   1      
+  66   1      }
+  67          
+  68          //------------------------------------------------------------------------------
+  69          // Function Name: Check if Video DAC capable
+  70          // Function Description:
+  71          //------------------------------------------------------------------------------
+  72          BOOL CheckVideoDAC_Cap ( void ){
+  73   1      BOOL qVidedDACCap = FALSE;
+  74   1      
+  75   1          if ((SiI_Ctrl.bDevId ==  RX_SiI9021 ) || ( SiI_Ctrl.bDevId ==  RX_SiI9031))
+  76   1              qVidedDACCap = TRUE;
+  77   1          return qVidedDACCap;
+  78   1      
+  79   1      }
+  80          //------------------------------------------------------------------------------
+  81          // Function Name: CheckVidPathForDevCap
+  82          // Function Description:
+  83          //------------------------------------------------------------------------------
+  84          static void CheckVidPathForDevCap( BYTE bVideoPath ){
+  85   1      BYTE bWCode = FALSE;
+  86   1      
+  87   1          switch ( bVideoPath ){
+  88   2              case SiI_RX_P_RGB_2PixClk:            // SiI9011
+  89   2              case SiI_RX_P_YCbCr444_2PixClk:       // SiI9011
+  90   2              case SiI_RX_P_YCbCr422_16B_2PixClk:   // SiI9011
+  91   2              case SiI_RX_P_YCbCr422_20B_2PixClk:   // SiI9011
+  92   2      
+  93   2      
+  94   2                  if ( SiI_Ctrl.bDevId !=  RX_SiI9011 )
+  95   2                      bWCode = SiI_WC_ChipNoCap;
+  96   2      
+  97   2      
+  98   2                  break;
+  99   2              case SiI_RX_P_RGB_48B:                // SiI9021/31
+ 100   2              case SiI_RX_P_YCbCr444_48B:           // SiI9021/31
+ 101   2      
+ 102   2                  if ( SiI_Ctrl.bDevId ==  RX_SiI9011 )
+ 103   2                      bWCode = SiI_WC_ChipNoCap;
+ 104   2      
+ 105   2          }
+ 106   1          siiWarningHandler( bWCode );
+ 107   1      }
+ 108          //------------------------------------------------------------------------------
+ 109          // Function Name: PrepVideoPathCSCAnalogDAC
+ 110          // Function Description:  This function sets type of Video DAC (RGB vs. YCbCr)
+ 111          //------------------------------------------------------------------------------
+ 112          static void PrepVideoPathCSCAnalogDAC( BYTE bVideoPath, BYTE * pbVideoOutputFormat){
+ 113   1      
+ 114   1          pbVideoOutputFormat[1] &= ( ~RX_BIT_RGBA_OUT );
+ 115   1          pbVideoOutputFormat[2] |= RX_BIT_EN_INS_CSYNC;
+ 116   1          switch ( bVideoPath ) {
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 3   
+
+ 117   2              case SiI_RX_P_RGB: // Clear YCbCr Converter, DownScale, UpScale
+ 118   2              case SiI_RX_P_RGB_2PixClk:            // SiI9011
+ 119   2              case SiI_RX_P_RGB_48B:                // SiI9021/31
+ 120   2                      pbVideoOutputFormat[1] |= RX_BIT_RGBA_OUT;
+ 121   2                  break;
+ 122   2          }
+ 123   1      
+ 124   1      }
+ 125          /***************************************************************************************************
+ 126          Transmitted color Space is ActiveColorSpace
+ 127          
+ 128          InputColorSpace == SiI_RX_ICP_RGB | InputColorSpace == SiI_RX_ICP_YCbCr444 | InputColorSpace == SiI_RX_ICP
+             -_YCbCr422
+ 129          
+ 130                                       [4A:2] VID_M [4A:1] VID_M   [4A:3]  VID_M  [49:2] VID_M2  [49:0] VID_M2
+ 131          InColorSpace  OutColorSpace  UpScale Bit  DownScale Bit  RGB->YCbCr     YCbCr->RGB     RGBAout
+ 132                                       422->444       444->422
+ 133          
+ 134          RGB            RGB           0            0              0              0              1
+ 135                         444           0            0              1              0              0
+ 136                         422           0            1              1              0              0
+ 137          
+ 138          444            RGB           0            0              0              1              1
+ 139                         444           0            0              0              0              0
+ 140                         422           0            1              0              0              0
+ 141          
+ 142          422            RGB           1            0              0              1              1
+ 143                         444           1            0              0              0              0
+ 144                         422           0            0              0              0              0
+ 145          ****************************************************************************************************/
+ 146          //------------------------------------------------------------------------------
+ 147          // Function Name: PrepVideoPathForRGBInput()
+ 148          // Function Description: Preparing Video Path's bits of Video Output Format structure for RGB Input Color 
+             -Space
+ 149          //  function sets Color Spase converters and Up or Down Sampling
+ 150          //------------------------------------------------------------------------------
+ 151          static void PrepVideoPathForRGBInput( BYTE bVideoPath, BYTE * pbVideoOutputFormat){
+ 152   1      //                                       |    7   |   6    |   5        |       4         |    3          
+             - |    2      |   1    |   0      |
+ 153   1      // pbVideoOutputFormat[0] 0x48 VID_CTRL  |InvVSync|InvHSync|CSyncOnVSync|CSyncOnHSync     |enSOG          
+             - |YCbCr2RGB  |BitMode |RGB2YCbCr |
+ 154   1      // pbVideoOutputFormat[1] 0x49 VID_MODE2 |Res     |Res     |Res         |LE Pol           |En YCbCr2RGB Rn
+             -g|EnYCbCr2RGB|En Ped. |DAC RGB   |
+ 155   1      // pbVideoOutputFormat[2] 0x4A VID_MODE  |SyncCode|MuxYC   |Dither      |En RGB2YCbCr Rng |En RGB2YCbCr   
+             - |UpSmpl     |DownSmpl|EnImsCSync|
+ 156   1      
+ 157   1          pbVideoOutputFormat[2]&=( ~( RX_BIT_444to422 | RX_BIT_422to444 | RX_BIT_DITHER | RX_BIT_MUX_YC | RX_BI
+             -T_RGBToYCbCr ) );
+ 158   1          pbVideoOutputFormat[1] &= (~ RX_BIT_YCbCrToRGB);
+ 159   1      
+ 160   1          pbVideoOutputFormat[0]&=( ~RX_BIT_EXT_BIT_MODE );
+ 161   1      
+ 162   1          switch ( bVideoPath ) {
+ 163   2      
+ 164   2              case SiI_RX_P_RGB: // Clear YCbCr Converter, DownScale, UpScale
+ 165   2              case SiI_RX_P_RGB_2PixClk:            // SiI9011
+ 166   2              case SiI_RX_P_RGB_48B:                // SiI9021/31
+ 167   2                      break;
+ 168   2              case SiI_RX_P_YCbCr444: // Set YCbCr Converter
+ 169   2              case SiI_RX_P_YCbCr444_2PixClk:       // SiI9011
+ 170   2              case SiI_RX_P_YCbCr444_48B:           // SiI9021/31
+ 171   2                                      pbVideoOutputFormat[2]|= RX_BIT_RGBToYCbCr;
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 4   
+
+ 172   2                      break;
+ 173   2                      // Set YCbCr Converter, set DownScale
+ 174   2                      // 4:2:2 mode is used with digital output only
+ 175   2      
+ 176   2              case SiI_RX_P_YCbCr422_MUX8B:         // YCbCr 422 muxed 8 bit, used with digital output only
+ 177   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_RGBToYCbCr|RX_BIT_444to422|RX_BIT_MUX_YC
+             -|RX_BIT_DITHER );
+ 178   2                                      break;
+ 179   2              case SiI_RX_P_YCbCr422_MUX10B:        // YCbCr 422 muxed 10 bit, used with digital output only
+ 180   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_RGBToYCbCr|RX_BIT_444to422|RX_BIT_MUX_YC
+             -);
+ 181   2                                      break;
+ 182   2              case SiI_RX_P_YCbCr422_16B:
+ 183   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_RGBToYCbCr|RX_BIT_444to422|RX_BIT_DITHER
+             -);
+ 184   2                                      break;
+ 185   2              case SiI_RX_P_YCbCr422:
+ 186   2              case SiI_RX_P_YCbCr422_20B:
+ 187   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_RGBToYCbCr|RX_BIT_444to422);
+ 188   2                                      break;
+ 189   2              case SiI_RX_P_YCbCr422_16B_2PixClk:   // SiI9011
+ 190   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_RGBToYCbCr|RX_BIT_444to422|RX_BIT_DITHER
+             - );
+ 191   2                                      break;
+ 192   2              case SiI_RX_P_YCbCr422_20B_2PixClk:   // SiI9011
+ 193   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_RGBToYCbCr|RX_BIT_444to422 );
+ 194   2                                      break;
+ 195   2          }
+ 196   1      }
+ 197          //------------------------------------------------------------------------------
+ 198          // Function Name: PrepVideoPathForYCbCr422Input()
+ 199          // Function Description: Preparing Video Path for YCbCr 422 Input Color Space
+ 200          //------------------------------------------------------------------------------
+ 201          static void PrepVideoPathForYCbCr422Input( BYTE bVideoPath, BYTE * pbVideoOutputFormat){
+ 202   1      //                                     |    7   |   6    |   5        |       4         |    3           |
+             -    2      |   1    |   0      |
+ 203   1      // pbVideoOutputFormat[0] 0x48 VID_CTRL  |InvVSync|InvHSync|CSyncOnVSync|CSyncOnHSync     |enSOG          
+             - |YCbCr2RGB  |BitMode |RGB2YCbCr |
+ 204   1      // pbVideoOutputFormat[1] 0x49 VID_MODE2 |Res     |Res     |Res         |LE Pol           |En YCbCr2RGB Rn
+             -g|EnYCbCr2RGB|En Ped. |DAC RGB   |
+ 205   1      // pbVideoOutputFormat[2] 0x4A VID_MODE  |SyncCode|MuxYC   |Dither      |En RGB2YCbCr Rng |En RGB2YCbCr   
+             - |UpSmpl     |DownSmpl|EnImsCSync|
+ 206   1      
+ 207   1          pbVideoOutputFormat[2]&=( ~( RX_BIT_444to422 | RX_BIT_422to444 | RX_BIT_DITHER | RX_BIT_MUX_YC | RX_BI
+             -T_RGBToYCbCr ) );
+ 208   1          pbVideoOutputFormat[1] &= (~ RX_BIT_YCbCrToRGB);
+ 209   1      
+ 210   1      //    pbVideoOutputFormat[0]&=( ~RX_BIT_EXT_BIT_MODE ); //YMA changed as JAPAN customer reported
+ 211   1        pbVideoOutputFormat[0]|= RX_BIT_EXT_BIT_MODE ;
+ 212   1      
+ 213   1          switch ( bVideoPath ) {
+ 214   2      
+ 215   2              // Clear YCbCr Converter, DownScale, UpScale
+ 216   2              case SiI_RX_P_RGB:
+ 217   2              case SiI_RX_P_RGB_2PixClk:            // SiI9011
+ 218   2              case SiI_RX_P_RGB_48B:                // SiI9021/31
+ 219   2                                      pbVideoOutputFormat[2]|= RX_BIT_422to444;
+ 220   2                                      pbVideoOutputFormat[1]|= RX_BIT_YCbCrToRGB;
+ 221   2                      break;
+ 222   2      
+ 223   2              // Set YCbCr Converter,
+ 224   2              case SiI_RX_P_YCbCr444:
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 5   
+
+ 225   2              case SiI_RX_P_YCbCr444_2PixClk:       // SiI9011
+ 226   2              case SiI_RX_P_YCbCr444_48B:           // SiI9021/31
+ 227   2                                      pbVideoOutputFormat[2]|=  RX_BIT_422to444;
+ 228   2                      break;
+ 229   2              // Set YCbCr Converter, set DownScale
+ 230   2              // 4:2:2 mode is used with digital output only
+ 231   2      
+ 232   2              case SiI_RX_P_YCbCr422_MUX8B:         // YCbCr 422 muxed 8 bit, used with digital output only
+ 233   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_MUX_YC|RX_BIT_DITHER );
+ 234   2                                      break;
+ 235   2              case SiI_RX_P_YCbCr422_MUX10B:        // YCbCr 422 muxed 10 bit, used with digital output only
+ 236   2                                      pbVideoOutputFormat[2]|= RX_BIT_MUX_YC;
+ 237   2                                      break;
+ 238   2              case SiI_RX_P_YCbCr422_16B:
+ 239   2                                      pbVideoOutputFormat[2]|= RX_BIT_DITHER;
+ 240   2                                      break;
+ 241   2              case SiI_RX_P_YCbCr422:
+ 242   2              case SiI_RX_P_YCbCr422_20B:
+ 243   2                                      break;
+ 244   2              case SiI_RX_P_YCbCr422_16B_2PixClk:   // SiI9011
+ 245   2                                      pbVideoOutputFormat[2]|= RX_BIT_DITHER;
+ 246   2                                      break;
+ 247   2              case SiI_RX_P_YCbCr422_20B_2PixClk:   // SiI9011
+ 248   2                                      break;
+ 249   2           }
+ 250   1      }
+ 251          //------------------------------------------------------------------------------
+ 252          // Function Name: PrepVideoPathForYCbCr444Input()
+ 253          // Function Description: Preparing Video Path for YCbCr 444 Input Color Space
+ 254          //------------------------------------------------------------------------------
+ 255          static void PrepVideoPathForYCbCr444Input( BYTE bVideoPath, BYTE * pbVideoOutputFormat){
+ 256   1      //                                     |    7   |   6    |   5        |       4         |    3           |
+             -    2      |   1    |   0      |
+ 257   1      // pbVideoOutputFormat[0] 0x48 VID_CTRL  |InvVSync|InvHSync|CSyncOnVSync|CSyncOnHSync     |enSOG          
+             - |YCbCr2RGB  |BitMode |RGB2YCbCr |
+ 258   1      // pbVideoOutputFormat[1] 0x49 VID_MODE2 |Res     |Res     |Res         |LE Pol           |En YCbCr2RGB Rn
+             -g|EnYCbCr2RGB|En Ped. |DAC RGB   |
+ 259   1      // pbVideoOutputFormat[2] 0x4A VID_MODE  |SyncCode|MuxYC   |Dither      |En RGB2YCbCr Rng |En RGB2YCbCr   
+             - |UpSmpl     |DownSmpl|EnImsCSync|
+ 260   1      
+ 261   1           pbVideoOutputFormat[2]&=( ~( RX_BIT_422to444 | RX_BIT_DITHER | RX_BIT_MUX_YC | RX_BIT_RGBToYCbCr) );
+ 262   1           pbVideoOutputFormat[1]&=( ~RX_BIT_YCbCrToRGB);
+ 263   1           pbVideoOutputFormat[0]&= ( ~RX_BIT_EXT_BIT_MODE);
+ 264   1      
+ 265   1      
+ 266   1           switch ( bVideoPath ) {
+ 267   2      
+ 268   2              // Clear YCbCr Converter, DownScale, UpScale
+ 269   2              case SiI_RX_P_RGB:
+ 270   2              case SiI_RX_P_RGB_2PixClk:            // SiI9011
+ 271   2              case SiI_RX_P_RGB_48B:                // SiI9021/31
+ 272   2                                  pbVideoOutputFormat[1] |= RX_BIT_YCbCrToRGB;
+ 273   2                      break;
+ 274   2      
+ 275   2              // Set YCbCr Converter,
+ 276   2              case SiI_RX_P_YCbCr444:
+ 277   2              case SiI_RX_P_YCbCr444_2PixClk:       // SiI9011
+ 278   2              case SiI_RX_P_YCbCr444_48B:           // SiI9021/31
+ 279   2      
+ 280   2                      break;
+ 281   2              // Set YCbCr Converter, set DownScale
+ 282   2              // 4:2:2 mode is used with digital output only
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 6   
+
+ 283   2              case SiI_RX_P_YCbCr422_20B:
+ 284   2              case SiI_RX_P_YCbCr422:
+ 285   2                                      pbVideoOutputFormat[2]|= RX_BIT_444to422;
+ 286   2                                      break;
+ 287   2              case SiI_RX_P_YCbCr422_MUX8B:         // YCbCr 422 muxed 8 bit, used with digital output only
+ 288   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_444to422 | RX_BIT_MUX_YC | RX_BIT_DITHER
+             - );
+ 289   2                                      break;
+ 290   2              case SiI_RX_P_YCbCr422_MUX10B:        // YCbCr 422 muxed 10 bit, used with digital output only
+ 291   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_444to422 | RX_BIT_MUX_YC );
+ 292   2                                      break;
+ 293   2              case SiI_RX_P_YCbCr422_16B:
+ 294   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_444to422 | RX_BIT_DITHER );
+ 295   2                                      break;
+ 296   2      
+ 297   2      
+ 298   2              case SiI_RX_P_YCbCr422_16B_2PixClk:   // SiI9011
+ 299   2                                      pbVideoOutputFormat[2]|= ( RX_BIT_444to422 | RX_BIT_DITHER );
+ 300   2                                      break;
+ 301   2              case SiI_RX_P_YCbCr422_20B_2PixClk:   // SiI9011
+ 302   2                                      break;
+ 303   2           }
+ 304   1      }
+ 305          
+ 306          //------------------------------------------------------------------------------
+ 307          // Function Name: siiPrepVideoPathSelect()
+ 308          // Function Description:  prepares Video Format Data for selected Video Format
+ 309          //
+ 310          // Accepts: BYTE Video Path Select, pointer on Video Format Data
+ 311          // Returns: Warning Byte, pointer on Video Format Data, Video Path Select Data can be modified
+ 312          // Globals: bInputColorSpace (read only)
+ 313          //------------------------------------------------------------------------------
+ 314          BYTE siiPrepVideoPathSelect( BYTE bVideoPathSelect, BYTE bInputColorSpace, BYTE * pbVidFormatData ){
+ 315   1      BYTE bECode = FALSE;
+ 316   1      
+ 317   1          if ( CheckVideoDAC_Cap () ){
+ 318   2              PrepVideoPathCSCAnalogDAC ( bVideoPathSelect & SiI_RX_P_Mask, pbVidFormatData );
+ 319   2          }
+ 320   1          if ( bInputColorSpace == SiI_RX_ICP_RGB ) {
+ 321   2              PrepVideoPathForRGBInput( bVideoPathSelect & SiI_RX_P_Mask, pbVidFormatData );
+ 322   2          }
+ 323   1          else if ( bInputColorSpace == SiI_RX_ICP_YCbCr422 ) {
+ 324   2              PrepVideoPathForYCbCr422Input( bVideoPathSelect & SiI_RX_P_Mask, pbVidFormatData );
+ 325   2          }
+ 326   1          else if ( bInputColorSpace == SiI_RX_ICP_YCbCr444 ) {
+ 327   2              PrepVideoPathForYCbCr444Input( bVideoPathSelect & SiI_RX_P_Mask, pbVidFormatData );
+ 328   2          }
+ 329   1          else  bECode = SiI_EC_InColorSpace;
+ 330   1      
+ 331   1          CheckVidPathForDevCap( bVideoPathSelect );
+ 332   1      
+ 333   1          return bECode;
+ 334   1      }
+ 335          //------------------------------------------------------------------------------
+ 336          // Function Name: siiPrepSyncSelect()
+ 337          // Function Description: prepares Sync Select data
+ 338          //
+ 339          // Accepts: BYTE Sync Select, pointer on Video Format Data
+ 340          // Returns: Warning byte, pointer on Video Format Data, sync select data can be modified
+ 341          // Globals: none
+ 342          //------------------------------------------------------------------------------
+ 343          BYTE siiPrepSyncSelect( BYTE bSyncSelect, BYTE * pbVidFormatData ){
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 7   
+
+ 344   1      BYTE bECode = FALSE;
+ 345   1      BYTE bWCode = FALSE;
+ 346   1      //                                       |    7   |   6    |   5        |       4         |    3          
+             - |    2      |   1    |   0      |
+ 347   1      // pbVideoOutputFormat[0] 0x48 VID_CTRL  |InvVSync|InvHSync|CSyncOnVSync|CSyncOnHSync     |enSOG          
+             - |YCbCr2RGB  |BitMode |RGB2YCbCr |
+ 348   1      // pbVideoOutputFormat[1] 0x49 VID_MODE2 |Res     |Res     |Res         |LE Pol           |En YCbCr2RGB Rn
+             -g|EnYCbCr2RGB|En Ped. |DAC RGB   |
+ 349   1      // pbVideoOutputFormat[2] 0x4A VID_MODE  |SyncCode|MuxYC   |Dither      |En RGB2YCbCr Rng |En RGB2YCbCr   
+             - |UpSmpl     |DownSmpl|EnImsCSync|
+ 350   1      
+ 351   1      
+ 352   1          pbVidFormatData[0] &= ( ~( RX_BIT_ENCSYNC_ON_HSYNC  | RX_BIT_ENCSYNC_ON_VSYNC  | RX_BIT_INSERT_CSYNC_O
+             -N_AOUT ) );
+ 353   1          pbVidFormatData[2] &= ( ~ RX_BIT_INS_SAVEAV );
+ 354   1          switch ( bSyncSelect ) {
+ 355   2      
+ 356   2              case SiI_RX_SS_SeparateSync:
+ 357   2                              break;
+ 358   2              case SiI_RX_SS_CompOnH:
+ 359   2                              pbVidFormatData[0] |= RX_BIT_ENCSYNC_ON_HSYNC;
+ 360   2                              break;
+ 361   2              case SiI_RX_SS_CompOnV:
+ 362   2                              pbVidFormatData[0] |= RX_BIT_ENCSYNC_ON_VSYNC;
+ 363   2                              break;
+ 364   2              case SiI_RX_SS_EmbSync:
+ 365   2                              pbVidFormatData[2] |= RX_BIT_INS_SAVEAV;
+ 366   2                              break;
+ 367   2              case SiI_RX_AVC_SOGY:
+ 368   2                              pbVidFormatData[0] |= RX_BIT_INSERT_CSYNC_ON_AOUT;
+ 369   2                              if ( SiI_Ctrl.bDevId ==  RX_SiI9011 )
+ 370   2                                  bWCode = SiI_WC_ChipNoCap;
+ 371   2                              break;
+ 372   2          }
+ 373   1          siiWarningHandler( bWCode );
+ 374   1      
+ 375   1          return bECode;
+ 376   1      }
+ 377          //------------------------------------------------------------------------------
+ 378          // Function Name: siiPrepSyncCtrl()
+ 379          // Function Description: parepares control of sync
+ 380          //
+ 381          // Accepts: byte Sync. control, and Video Format Data
+ 382          // Returns: Warning byte, pointer on Video Format Data, sync control data can be modified
+ 383          // Globals: none
+ 384          //------------------------------------------------------------------------------
+ 385          BYTE siiPrepSyncCtrl( BYTE bSyncCtrl, BYTE * pbVidFormatData ){
+ 386   1      BYTE bECode = FALSE;
+ 387   1      //                                     |    7   |   6    |   5        |       4         |    3           |
+             -    2      |   1    |   0      |
+ 388   1      // pbVidOutputFormat[0] 0x48 VID_CTRL  |InvVSync|InvHSync|CSyncOnVSync|CSyncOnHSync     |enSOG           |
+             -YCbCr2RGB  |BitMode |RGB2YCbCr |
+ 389   1      // pbVidOutputFormat[1] 0x49 VID_MODE2 |Res     |Res     |Res         |LE Pol           |En YCbCr2RGB Rng|
+             -EnYCbCr2RGB|En Ped. |DAC RGB   |
+ 390   1      // pbVidOutputFormat[2] 0x4A VID_MODE  |SyncCode|MuxYC   |Dither      |En RGB2YCbCr Rng |En RGB2YCbCr    |
+             -UpSmpl     |DownSmpl|EnImsCSync|
+ 391   1      
+ 392   1          pbVidFormatData[0] &= ( ~(RX_BIT_INVERT_HSYNC | RX_BIT_INVERT_VSYNC) );
+ 393   1          if ( bSyncCtrl & SiI_RX_SC_InvH )
+ 394   1              pbVidFormatData[0] |= RX_BIT_INVERT_HSYNC;
+ 395   1          if ( bSyncCtrl & SiI_RX_SC_InvV )
+ 396   1              pbVidFormatData[0] |= RX_BIT_INVERT_VSYNC;
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 8   
+
+ 397   1      
+ 398   1          return bECode;
+ 399   1      }
+ 400          //------------------------------------------------------------------------------
+ 401          // Function Name: siiPrepVideoCtrl()
+ 402          // Function Description: Sets Enable or Disable pedestal
+ 403          //
+ 404          // Accepts: pointer on Video Format Data
+ 405          // Returns: Warning code, if wrong parameter, Modified Video Format Data
+ 406          // Globals: none
+ 407          //------------------------------------------------------------------------------
+ 408          BYTE siiPrepVideoCtrl( BYTE bVideoOutCtrl, BYTE * pbVidFormatData ){
+ 409   1      BYTE bECode = FALSE;
+ 410   1      BYTE bWCode = FALSE;
+ 411   1      //                                     |    7   |   6    |   5        |       4         |    3           |
+             -    2      |   1    |   0      |
+ 412   1      // pbVidOutputFormat[0] 0x48 VID_CTRL  |InvVSync|InvHSync|CSyncOnVSync|CSyncOnHSync     |enSOG           |
+             -YCbCr2RGB  |BitMode |RGB2YCbCr |
+ 413   1      // pbVidOutputFormat[1] 0x49 VID_MODE2 |Res     |Res     |Res         |LE Pol           |En YCbCr2RGB Rng|
+             -EnYCbCr2RGB|En Ped. |DAC RGB   |
+ 414   1      // pbVidOutputFormat[2] 0x4A VID_MODE  |SyncCode|MuxYC   |Dither      |En RGB2YCbCr Rng |En RGB2YCbCr    |
+             -UpSmpl     |DownSmpl|EnImsCSync|
+ 415   1      
+ 416   1      
+ 417   1          if( bVideoOutCtrl == SiI_RX_AVC_Pedestal)
+ 418   1              pbVidFormatData[1] |= RX_BIT_EN_PEDESTAL;
+ 419   1          else if ( bVideoOutCtrl == SiI_RX_AVC_NoPedestal )
+ 420   1              pbVidFormatData[1] &= ( ~RX_BIT_EN_PEDESTAL );
+ 421   1      
+ 422   1          if ( (SiI_Ctrl.bDevId ==  RX_SiI9011 ) && ( bVideoOutCtrl != SiI_RX_AVC_Digital_Output) )
+ 423   1              bWCode = SiI_WC_ChipNoCap;
+ 424   1      
+ 425   1          if ( bVideoOutCtrl == SiI_RX_AVC_Digital_Output)
+ 426   1              sii_SetVideoOutputPowerDown( SiI_RX_VidOutPD_Analog );
+ 427   1          else
+ 428   1              sii_SetVideoOutputPowerDown( SiI_RX_VidOutPD_Digital );
+ 429   1      
+ 430   1          siiWarningHandler( bWCode );
+ 431   1          return bECode;
+ 432   1      }
+ 433          
+ 434          //------------------------------------------------------------------------------
+ 435          // Function Name: Configure2PixPerClockMode()
+ 436          // Function Description: Function turns on or off 2 Pixels per clock mode
+ 437          //------------------------------------------------------------------------------
+ 438          static void Configure2PixPerClockMode( BOOL On ){
+ 439   1      
+ 440   1      
+ 441   1          if ( On ){
+ 442   2              siiIIC_RX_RWBitsInByteP0( RX_SYS_CTRL1_ADDR , RX_BIT_2PIX_MODE, SET );
+ 443   2              siiIIC_RX_RWBitsInByteP1( RX_PD_SYS2_ADDR , RX_BIT_PD_QE, SET );
+ 444   2          }
+ 445   1          else {
+ 446   2              siiIIC_RX_RWBitsInByteP0( RX_SYS_CTRL1_ADDR , RX_BIT_2PIX_MODE, CLR );
+ 447   2              siiIIC_RX_RWBitsInByteP1( RX_PD_SYS2_ADDR , RX_BIT_PD_QE, CLR );
+ 448   2          }
+ 449   1      
+ 450   1      }
+ 451          
+ 452          //------------------------------------------------------------------------------
+ 453          // Function Name: SetInputOutputDivider
+ 454          // Function Description: Function Sets Input and Output pixel clock divider
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 9   
+
+ 455          //------------------------------------------------------------------------------
+ 456          static void SetInputOutputDivider( BOOL qMode48BitOr2PixClk, BOOL qRestoreOrigPixClock, BYTE PixRepl ){
+ 457   1      BYTE bRegVal;
+ 458   1          SiI_Ctrl.bShadowPixRepl = PixRepl;
+ 459   1          bRegVal = siiReadByteHDMIRXP0( RX_SYS_CTRL1_ADDR );
+ 460   1      
+ 461   1          bRegVal &= RX_MSK_CLR_IN_OUT_DIV;   // clear bits of input and output devider
+ 462   1      
+ 463   1          bRegVal |= ( PixRepl << 4 );        // Set bits for input divider equal Pixel Replication
+ 464   1      
+ 465   1          if ( (!qRestoreOrigPixClock) && qMode48BitOr2PixClk ) {
+ 466   2                      bRegVal |= RX_OUTPUT_DIV_BY_2;
+ 467   2          }
+ 468   1          else if ( qRestoreOrigPixClock && (!qMode48BitOr2PixClk) )
+ 469   1              bRegVal |= ( PixRepl << 6 );   // Set bits for output divider to restore original pixel clock
+ 470   1          else if ( qRestoreOrigPixClock && qMode48BitOr2PixClk ){
+ 471   2              if ( PixRepl == SiI_PixRepl1)
+ 472   2                  bRegVal |= RX_OUTPUT_DIV_BY_2;
+ 473   2              else if ( PixRepl == SiI_PixRepl2)
+ 474   2                  bRegVal |= RX_OUTPUT_DIV_BY_4;
+ 475   2              else {
+ 476   3                      siiWarningHandler( SiI_WC_ChipNoCap );
+ 477   3              }
+ 478   2          }
+ 479   1      
+ 480   1          siiWriteByteHDMIRXP0( RX_SYS_CTRL1_ADDR , bRegVal );
+ 481   1      
+ 482   1      
+ 483   1      }
+ 484          //------------------------------------------------------------------------------
+ 485          // Function Name: siiSetVidResDependentVidOutputVormat
+ 486          // Function Description: Functions sets Video Resolution dependent parameters:
+ 487          // Pix Replication Divider, Output Divider
+ 488          // Accepts: BYTE Pixel Replication Rate, BYTE Video Path Select
+ 489          // Returns: Warning code, if wrong parameter
+ 490          // Globals: none
+ 491          //------------------------------------------------------------------------------
+ 492          
+ 493          void siiSetVidResDependentVidPath( BYTE bPixRepl, BYTE bVideoPath ){
+ 494   1      BOOL qRestoreOrgPixClock = TRUE;
+ 495   1      
+ 496   1          if ( bVideoPath & SiI_RX_P_S_PassReplicatedPixels )
+ 497   1              qRestoreOrgPixClock = FALSE;
+ 498   1          switch ( bVideoPath ) {
+ 499   2      
+ 500   2              case SiI_RX_P_RGB_2PixClk:            // SiI9011
+ 501   2              case SiI_RX_P_YCbCr444_2PixClk:       // SiI9011
+ 502   2              case SiI_RX_P_YCbCr422_16B_2PixClk:   // SiI9011
+ 503   2              case SiI_RX_P_YCbCr422_20B_2PixClk:   // SiI9011
+ 504   2                  if ( SiI_Ctrl.bDevId ==  RX_SiI9011 ) {
+ 505   3                      Configure2PixPerClockMode(ON);
+ 506   3                      SetInputOutputDivider( ON /*On 48bit(LE) or 2Pix*/, qRestoreOrgPixClock, bPixRepl );
+ 507   3                  }
+ 508   2                  else
+ 509   2                      siiWarningHandler( SiI_WC_ChipNoCap );
+ 510   2      
+ 511   2                      break;
+ 512   2      
+ 513   2              case SiI_RX_P_RGB_48B:                // SiI9021/31
+ 514   2              case SiI_RX_P_YCbCr444_48B:           // SiI9021/31
+ 515   2                      SetInputOutputDivider( ON /*On 48bit(LE) or 2Pix*/, qRestoreOrgPixClock, bPixRepl );
+ 516   2      
+C51 COMPILER V9.51   SIIVIDF                                                               05/29/2013 17:33:23 PAGE 10  
+
+ 517   2                      if ( SiI_Ctrl.bDevId ==  RX_SiI9011 )
+ 518   2                          siiWarningHandler( SiI_WC_ChipNoCap );
+ 519   2      
+ 520   2                      break;
+ 521   2              default:
+ 522   2                      SetInputOutputDivider( OFF/*Off 48bit (LE) and 2Pix*/, qRestoreOrgPixClock, bPixRepl );
+ 523   2                      if ( SiI_Ctrl.bDevId ==  RX_SiI9011 )
+ 524   2                          Configure2PixPerClockMode(OFF);
+ 525   2                      break;
+ 526   2          }
+ 527   1      }
+ 528          
+ 529          //------------------------------------------------------------------------------
+ 530          // Function Name:   siiMuteVideo
+ 531          // Function Description: Reads Audio Path, modifys Video Mute bit
+ 532          //
+ 533          // Accepts: BYTE Video Mute Control
+ 534          // Returns: Err or Warning code
+ 535          // Globals: none
+ 536          //------------------------------------------------------------------------------
+ 537          void siiMuteVideo( BYTE On ){
+ 538   1      
+ 539   1          if ( On ) {
+ 540   2              siiIIC_RX_RWBitsInByteP1( RX_AUDP_MUTE_ADDR, RX_BIT_VIDEO_MUTE, SET );
+ 541   2              SiI_Inf.bGlobStatus |= SiI_RX_Global_VMute;
+ 542   2          }
+ 543   1          else {
+ 544   2              siiIIC_RX_RWBitsInByteP1( RX_AUDP_MUTE_ADDR, RX_BIT_VIDEO_MUTE, CLR );
+ 545   2              SiI_Inf.bGlobStatus &= (~SiI_RX_Global_VMute);
+ 546   2          }
+ 547   1      }
+ 548          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1807    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----      38
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       5
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
